@@ -5,6 +5,8 @@
 
 add_library(radio_core STATIC
   src/proto/proto.cpp
+  src/time/clock.cpp
+  src/metrics/seq_tracker.cpp
 )
 
 target_include_directories(radio_core PUBLIC include)
@@ -15,7 +17,9 @@ target_link_libraries(radio_core PRIVATE radio_warnings PUBLIC radio_sanitizers)
 # a consumer to include it.
 target_sources(radio_core PRIVATE
   include/radio/bytes.hpp
+  include/radio/clock.hpp
   include/radio/proto.hpp
+  include/radio/seq_tracker.hpp
   include/radio/serial.hpp
 )
 

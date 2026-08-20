@@ -18,6 +18,7 @@ add_executable(radio_tests
   test_bytes.cpp
   test_serial.cpp
   test_proto.cpp
+  test_seq_tracker.cpp
 )
 
 target_link_libraries(radio_tests
