@@ -1,0 +1,31 @@
+# Build trees. `build` is the default; build-san / build-tsan / build-android /
+# build-ios are the conventional names used in docs and CI.
+/build*/
+
+# Benchmark output. Curated results are committed by hand into
+# benchmarks/results/, so raw sweeps and trace dumps stay out.
+/benchmarks/results/**/raw/
+*.jsonl
+*.trace.csv
+
+# Generated wavs from the media pipeline. Small reference clips under
+# benchmarks/fixtures/ are committed; anything a run produces is not.
+/benchmarks/results/**/*.wav
+
+# Toolchain / editor
+compile_commands.json
+.cache/
+.DS_Store
+*.dSYM/
+
+# Android
+/android/.gradle/
+/android/local.properties
+/android/**/build/
+.externalNativeBuild/
+.cxx/
+
+# iOS / Xcode
+*.xcuserdatad/
+xcuserdata/
+/ios/**/*.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
