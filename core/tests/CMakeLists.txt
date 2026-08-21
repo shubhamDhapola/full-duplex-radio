@@ -21,6 +21,9 @@ add_executable(radio_tests
   test_seq_tracker.cpp
   test_jitter_estimator.cpp
   test_histogram.cpp
+  test_endpoint.cpp
+  test_udp_socket.cpp
+  test_pacer.cpp
 )
 
 target_link_libraries(radio_tests

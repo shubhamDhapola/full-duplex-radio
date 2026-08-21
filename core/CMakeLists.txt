@@ -9,6 +9,9 @@ add_library(radio_core STATIC
   src/metrics/seq_tracker.cpp
   src/metrics/jitter_estimator.cpp
   src/metrics/histogram.cpp
+  src/net/endpoint.cpp
+  src/net/udp_socket.cpp
+  src/net/pacer.cpp
 )
 
 target_include_directories(radio_core PUBLIC include)
@@ -19,12 +22,15 @@ target_link_libraries(radio_core PRIVATE radio_warnings PUBLIC radio_sanitizers)
 # a consumer to include it.
 target_sources(radio_core PRIVATE
   include/radio/bytes.hpp
+  include/radio/endpoint.hpp
   include/radio/clock.hpp
   include/radio/histogram.hpp
   include/radio/jitter_estimator.hpp
+  include/radio/pacer.hpp
   include/radio/proto.hpp
   include/radio/seq_tracker.hpp
   include/radio/serial.hpp
+  include/radio/udp_socket.hpp
 )
 
 set_target_properties(radio_core PROPERTIES

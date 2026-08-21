@@ -4,14 +4,14 @@ Low-latency LAN voice intercom: push-to-talk → voice-activated → full duplex
 Android and iOS, over a custom UDP protocol with Opus, adaptive jitter
 buffering, and measured latency.
 
-**Status:** M0 in progress — core measurement layers complete, network layer next.
+**Status:** M0 in progress — core, metrics and network layers complete; host tools next.
 
 | | |
 |---|---|
-| Tests | 64 passing, zero warnings under `-Wconversion -Wsign-conversion -Wold-style-cast` |
+| Tests | 99 passing, zero warnings under `-Wconversion -Wsign-conversion -Wold-style-cast` |
 | Sanitizers | clean under ASan + UBSan |
 | Language | C++20 (core), Kotlin (Android, M2), Swift (iOS, M9) |
-| Committed | ~3,000 lines across core, protocol spec, decisions |
+| Committed | ~4,700 lines across core, protocol spec, decisions |
 
 ## Verify
 
@@ -47,6 +47,9 @@ against the proxy's ground truth**.
 - [x] `radio/seq_tracker.hpp` — sliding-window bitmap: loss, duplicate, reorder, too-old
 - [x] `radio/jitter_estimator.hpp` — RFC 3550 interarrival jitter, talkspurt re-anchoring
 - [x] `radio/histogram.hpp` — log-linear buckets, 3.1% bounded error, exact min/max/mean
+- [x] `radio/endpoint.hpp` — address+port value type, no socket headers in the interface, numeric-only parsing
+- [x] `radio/udp_socket.hpp` — RAII owning handle, move-only, non-blocking, immediate arrival timestamp, MSG_TRUNC detection
+- [x] `radio/pacer.hpp` — drift-free departure schedule with catch-up resync
 - [x] `docs/decisions/0001` — custom UDP transport instead of WebRTC
 
 ### Remaining
@@ -54,9 +57,7 @@ against the proxy's ground truth**.
 - [ ] `protocol/testvectors/*.json` — hex datagram ⇄ expected fields or rejection class
 - [ ] Conformance test reading the vectors (the cross-platform interop contract)
 - [ ] libFuzzer entry point for the packet parser
-- [ ] `radio/net.hpp` — `UdpSocket` (RAII, non-blocking, v4 + v6), `Endpoint`
-- [ ] `core/net` — receive loop
-- [ ] `core/net` — pacer, so a talkspurt leaves at 20 ms spacing instead of bursting
+- [ ] `core/net` — receive loop driving socket + pacer together
 - [ ] `radio/clock_sync.hpp` — NTP-style offset/RTT estimator, min-RTT selection, outlier rejection
 - [ ] `radio/trace.hpp` — `TraceStamp` per-packet stage timestamps + JSONL sink
 - [ ] `tools/radiobench` — `pingpong`, `flood`, `recv`, `clocksync` modes
