@@ -3,5 +3,6 @@
 # tracing on one end of a real call.
 #
 # `impair` is the seeded network impairment proxy that makes the benchmark
-# numbers reproducible. Added next.
+# numbers reproducible.
 add_subdirectory(radiobench)
+add_subdirectory(impair)

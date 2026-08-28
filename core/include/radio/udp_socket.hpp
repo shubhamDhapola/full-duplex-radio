@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
 
 #include "radio/bytes.hpp"
 #include "radio/clock.hpp"
@@ -138,10 +139,35 @@ class UdpSocket {
   void reset_stats() noexcept { stats_ = Stats{}; }
 
  private:
+  // The multi-socket poll helper below is the only thing outside the class that
+  // needs the descriptor, and it needs it purely to hand to poll().
+  friend int wait_any_readable(std::span<UdpSocket* const> sockets,
+                               std::span<bool> readable, int timeout_ms) noexcept;
+
   int fd_ = -1;
   int last_error_ = 0;
   Endpoint local_{};
   Stats stats_{};
 };
+
+// Waits until at least one of `sockets` is readable, or the timeout expires.
+//
+// A relay or a multi-peer receive loop needs one poll() covering several
+// sockets: polling each in turn with a short timeout would either burn CPU or
+// add the timeout to every packet's latency.
+//
+// This lives in the core rather than in the tool so the file descriptor stays
+// private to UdpSocket -- exposing a native_handle() accessor would let any
+// caller bypass the class's invariants, and the only thing anyone actually needs
+// is this.
+//
+// `readable` must be the same length as `sockets` and is filled in on return.
+// Returns the number readable, 0 on timeout, or -1 on error. At most
+// kMaxPolledSockets are accepted.
+inline constexpr std::size_t kMaxPolledSockets = 16;
+
+[[nodiscard]] int wait_any_readable(std::span<UdpSocket* const> sockets,
+                                   std::span<bool> readable,
+                                   int timeout_ms) noexcept;
 
 }  // namespace radio::net

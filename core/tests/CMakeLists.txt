@@ -26,6 +26,7 @@ add_executable(radio_tests
   test_pacer.cpp
   test_clock_sync.cpp
   test_trace.cpp
+  test_impairment.cpp
 )
 
 target_link_libraries(radio_tests

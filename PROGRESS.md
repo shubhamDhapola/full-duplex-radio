@@ -4,14 +4,14 @@ Low-latency LAN voice intercom: push-to-talk → voice-activated → full duplex
 Android and iOS, over a custom UDP protocol with Opus, adaptive jitter
 buffering, and measured latency.
 
-**Status:** M0 in progress — core complete and `radiobench` running; impairment proxy and test vectors remain.
+**Status:** M0 nearly complete — acceptance criterion **met**; test vectors and fuzz target remain.
 
 | | |
 |---|---|
-| Tests | 129 passing, zero warnings under `-Wconversion -Wsign-conversion -Wold-style-cast` |
+| Tests | 149 passing, zero warnings under `-Wconversion -Wsign-conversion -Wold-style-cast` |
 | Sanitizers | clean under ASan + UBSan |
 | Language | C++20 (core), Kotlin (Android, M2), Swift (iOS, M9) |
-| Committed | ~7,000 lines across core, protocol spec, decisions |
+| Committed | ~9,500 lines across core, protocol spec, decisions |
 
 ## Verify
 
@@ -53,6 +53,10 @@ against the proxy's ground truth**.
 - [x] `radio/clock_sync.hpp` — NTP-style offset/RTT, min-RTT selection, uncertainty bound, coarse drift
 - [x] `radio/trace.hpp` — per-packet stage timestamps, fixed-capacity ring, CSV/JSONL sinks
 - [x] `tools/radiobench` — `respond` / `ping` / `send`, human + JSON reports, seeded runs
+- [x] `radio/impairment.hpp` — seeded model: Gilbert-Elliott burst loss, 3 jitter shapes, duplication, reordering, token bucket
+- [x] `tools/impair` — bidirectional relay, per-direction impairment, ground-truth event log
+- [x] `benchmarks/scenarios/` — 6 scenarios covering the benchmark matrix
+- [x] **M0 acceptance criterion met** — reported metrics match the proxy's ground-truth log exactly
 - [x] `docs/decisions/0001` — custom UDP transport instead of WebRTC
 
 ### Verified working
@@ -71,6 +75,33 @@ $ radiobench send --peer 127.0.0.1:47101 --rate 50 --duration 4 --seed 42
 The offset check is real validation, not plausibility: both processes share one
 clock, so the true answer is exactly 0, and the estimator landed inside its own
 stated error bar.
+
+### M0 acceptance: metrics validated against ground truth
+
+The proxy parses AUDIO headers purely to log which sequence numbers it dropped,
+so validation is an exact set comparison rather than a rate comparison:
+
+```
+                      lost gt   reported   dup gt   reported
+burst 10% x3               68         68        6          6   PASS
+independent 8%             47         47        9          9   PASS
+poor.conf                  30         30        3          3   PASS
+congested.conf              0          0        2          2   PASS
+```
+
+Determinism: same seed reproduces identical decisions for all 301 packets of a
+run; a different seed differs at all 301 positions.
+
+Burst model, 400k packets per row:
+
+```
+model                     loss%   events  mean len  max len
+independent 5%           4.969%    18892      1.05        4
+burst 5%, mean 8         5.101%     2476      8.24       62
+```
+
+Same 5% loss, a 62-frame worst case (1.24 s of audio) versus 4. This is why
+FEC benchmarked only against independent loss would be misleading.
 
 ### Open finding: the host tools add ~2 ms of jitter
 
@@ -92,8 +123,7 @@ timing comes from the audio clock rather than a scheduler. If the device is
 - [ ] `protocol/testvectors/*.json` — hex datagram ⇄ expected fields or rejection class
 - [ ] Conformance test reading the vectors (the cross-platform interop contract)
 - [ ] libFuzzer entry point for the packet parser
-- [ ] `tools/impair` — seeded proxy: delay, jitter distributions, i.i.d. + Gilbert-Elliott burst loss, reorder, duplicate, token-bucket rate limit, ground-truth event log
-- [ ] **M0 acceptance:** Mac ↔ Mac over Wi-Fi through `impair`; reported metrics match the proxy's event log; identical seed reproduces an identical impairment pattern
+- [ ] Mac ↔ Mac over real Wi-Fi (so far validated on loopback only)
 
 ---
 

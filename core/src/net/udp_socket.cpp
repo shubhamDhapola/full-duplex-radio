@@ -305,6 +305,48 @@ UdpSocket::SendResult UdpSocket::send_to(const Endpoint& to,
   return result;
 }
 
+int wait_any_readable(std::span<UdpSocket* const> sockets,
+                      std::span<bool> readable, int timeout_ms) noexcept {
+  if (sockets.empty() || readable.size() != sockets.size() ||
+      sockets.size() > kMaxPolledSockets) {
+    return -1;
+  }
+
+  // Fixed-size stack array: this runs on the relay's hot loop, so no allocation.
+  pollfd descriptors[kMaxPolledSockets]{};
+  std::size_t polled = 0;
+
+  for (std::size_t i = 0; i < sockets.size(); ++i) {
+    readable[i] = false;
+    if (sockets[i] == nullptr || !sockets[i]->is_open()) continue;
+    descriptors[polled].fd = sockets[i]->fd_;
+    descriptors[polled].events = POLLIN;
+    ++polled;
+  }
+  if (polled == 0) return -1;
+
+  int ready = 0;
+  do {
+    ready = ::poll(descriptors, static_cast<nfds_t>(polled), timeout_ms);
+  } while (ready < 0 && errno == EINTR);
+
+  if (ready <= 0) return ready;
+
+  // Map results back, skipping the same closed sockets that were skipped above
+  // so the indices stay aligned.
+  std::size_t slot = 0;
+  int count = 0;
+  for (std::size_t i = 0; i < sockets.size(); ++i) {
+    if (sockets[i] == nullptr || !sockets[i]->is_open()) continue;
+    if ((descriptors[slot].revents & POLLIN) != 0) {
+      readable[i] = true;
+      ++count;
+    }
+    ++slot;
+  }
+  return count;
+}
+
 bool UdpSocket::wait_readable(int timeout_ms) noexcept {
   if (fd_ < 0) return false;
 
