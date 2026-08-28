@@ -4,14 +4,14 @@ Low-latency LAN voice intercom: push-to-talk → voice-activated → full duplex
 Android and iOS, over a custom UDP protocol with Opus, adaptive jitter
 buffering, and measured latency.
 
-**Status:** M0 in progress — core, metrics and network layers complete; host tools next.
+**Status:** M0 in progress — core complete and `radiobench` running; impairment proxy and test vectors remain.
 
 | | |
 |---|---|
-| Tests | 115 passing, zero warnings under `-Wconversion -Wsign-conversion -Wold-style-cast` |
+| Tests | 129 passing, zero warnings under `-Wconversion -Wsign-conversion -Wold-style-cast` |
 | Sanitizers | clean under ASan + UBSan |
 | Language | C++20 (core), Kotlin (Android, M2), Swift (iOS, M9) |
-| Committed | ~5,300 lines across core, protocol spec, decisions |
+| Committed | ~7,000 lines across core, protocol spec, decisions |
 
 ## Verify
 
@@ -51,16 +51,47 @@ against the proxy's ground truth**.
 - [x] `radio/udp_socket.hpp` — RAII owning handle, move-only, non-blocking, immediate arrival timestamp, MSG_TRUNC detection
 - [x] `radio/pacer.hpp` — drift-free departure schedule with catch-up resync
 - [x] `radio/clock_sync.hpp` — NTP-style offset/RTT, min-RTT selection, uncertainty bound, coarse drift
+- [x] `radio/trace.hpp` — per-packet stage timestamps, fixed-capacity ring, CSV/JSONL sinks
+- [x] `tools/radiobench` — `respond` / `ping` / `send`, human + JSON reports, seeded runs
 - [x] `docs/decisions/0001` — custom UDP transport instead of WebRTC
+
+### Verified working
+
+```
+$ radiobench ping --peer 127.0.0.1:47100 --count 40 --interval 25
+  probes         40 sent, 40 replied, 0 timed out
+  rtt            p50 0.199  p95 0.335  p99 0.447  min 0.150  max 0.447 ms
+  clock offset   +0.034 ms +/- 0.080 ms   <- true offset is 0 (same machine)
+
+$ radiobench send --peer 127.0.0.1:47101 --rate 50 --duration 4 --seed 42
+  actual rate    49.95 pps       wire bitrate 38.6 kbps
+  received 201 of 201, 0 lost, 0 duplicate, 0 reordered
+```
+
+The offset check is real validation, not plausibility: both processes share one
+clock, so the true answer is exactly 0, and the estimator landed inside its own
+stated error bar.
+
+### Open finding: the host tools add ~2 ms of jitter
+
+`nanosleep` overshoots by hundreds of microseconds to ~2 ms, so departures
+scatter around the 20 ms grid and the receiver measures that as jitter:
+
+```
+sender max deviation from ideal grid   7085 us
+receiver measured peak jitter          7271 us    (same number)
+```
+
+Consequences: host-side jitter measurements carry ~2 ms of instrument noise and
+must be quoted as such; and this should largely vanish on Android, where capture
+timing comes from the audio clock rather than a scheduler. If the device is
+*worse* than 2 ms, that is itself the finding. See `learn/10`.
 
 ### Remaining
 
 - [ ] `protocol/testvectors/*.json` — hex datagram ⇄ expected fields or rejection class
 - [ ] Conformance test reading the vectors (the cross-platform interop contract)
 - [ ] libFuzzer entry point for the packet parser
-- [ ] `core/net` — receive loop driving socket + pacer together
-- [ ] `radio/trace.hpp` — `TraceStamp` per-packet stage timestamps + JSONL sink
-- [ ] `tools/radiobench` — `pingpong`, `flood`, `recv`, `clocksync` modes
 - [ ] `tools/impair` — seeded proxy: delay, jitter distributions, i.i.d. + Gilbert-Elliott burst loss, reorder, duplicate, token-bucket rate limit, ground-truth event log
 - [ ] **M0 acceptance:** Mac ↔ Mac over Wi-Fi through `impair`; reported metrics match the proxy's event log; identical seed reproduces an identical impairment pattern
 
