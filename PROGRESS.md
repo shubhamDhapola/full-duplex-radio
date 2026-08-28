@@ -4,14 +4,14 @@ Low-latency LAN voice intercom: push-to-talk → voice-activated → full duplex
 Android and iOS, over a custom UDP protocol with Opus, adaptive jitter
 buffering, and measured latency.
 
-**Status:** M0 nearly complete — acceptance criterion **met**; test vectors and fuzz target remain.
+**Status:** M0 complete on loopback. Only the two-machine Wi-Fi run is outstanding, and it is blocked on hardware. M1 is next.
 
 | | |
 |---|---|
-| Tests | 149 passing, zero warnings under `-Wconversion -Wsign-conversion -Wold-style-cast` |
+| Tests | 159 passing, zero warnings under `-Wconversion -Wsign-conversion -Wold-style-cast` |
 | Sanitizers | clean under ASan + UBSan |
 | Language | C++20 (core), Kotlin (Android, M2), Swift (iOS, M9) |
-| Committed | ~9,500 lines across core, protocol spec, decisions |
+| Committed | ~11,000 lines across core, protocol spec, decisions |
 
 ## Verify
 
@@ -56,6 +56,10 @@ against the proxy's ground truth**.
 - [x] `radio/impairment.hpp` — seeded model: Gilbert-Elliott burst loss, 3 jitter shapes, duplication, reordering, token bucket
 - [x] `tools/impair` — bidirectional relay, per-direction impairment, ground-truth event log
 - [x] `benchmarks/scenarios/` — 6 scenarios covering the benchmark matrix
+- [x] `protocol/testvectors/` — 35 vectors from an **independent** Python encoder written from the spec
+- [x] Conformance test — accept fields, reject classes, and byte-exact re-encoding
+- [x] `test_parser_stress.cpp` — portable seeded random + mutation, exhaustive over lengths, prefixes and all 65536 flag values
+- [x] `fuzz_proto.cpp` — libFuzzer entry point, gated (AppleClang ships no libFuzzer, so it warns rather than failing)
 - [x] **M0 acceptance criterion met** — reported metrics match the proxy's ground-truth log exactly
 - [x] `docs/decisions/0001` — custom UDP transport instead of WebRTC
 
@@ -103,6 +107,22 @@ burst 5%, mean 8         5.101%     2476      8.24       62
 Same 5% loss, a 62-frame worst case (1.24 s of audio) versus 4. This is why
 FEC benchmarked only against independent loss would be misleading.
 
+### Test suite is itself verified
+
+An off-by-one was deliberately injected into the media length check
+(`<=` became `<`, so a header-only datagram would be accepted). Five independent
+layers caught it:
+
+```
+ 19 - media length boundaries are enforced exactly          (unit)
+ 20 - validation happens in the order the spec mandates     (unit)
+152 - every reject vector is rejected with the right class  (conformance)
+154 - every datagram length from 0 to 64 bytes is handled   (stress)
+158 - mutations of valid packets never break a parser       (stress)
+```
+
+A suite that has never failed is a suite of unknown value. See `learn/12`.
+
 ### Open finding: the host tools add ~2 ms of jitter
 
 `nanosleep` overshoots by hundreds of microseconds to ~2 ms, so departures
@@ -120,10 +140,10 @@ timing comes from the audio clock rather than a scheduler. If the device is
 
 ### Remaining
 
-- [ ] `protocol/testvectors/*.json` — hex datagram ⇄ expected fields or rejection class
-- [ ] Conformance test reading the vectors (the cross-platform interop contract)
-- [ ] libFuzzer entry point for the packet parser
-- [ ] Mac ↔ Mac over real Wi-Fi (so far validated on loopback only)
+- [ ] **Mac ↔ Mac over real Wi-Fi** — *blocked: needs a second machine.* Everything so far is
+      validated on loopback, which exercises the full protocol and metrics path but not
+      contention, retries, or power-save. The Android work in M2 supplies the second
+      endpoint, so this folds into phone ↔ Mac testing rather than waiting.
 
 ---
 

@@ -27,6 +27,7 @@ option(RADIO_BUILD_TESTS "Build unit and conformance tests" ON)
 option(RADIO_BUILD_TOOLS "Build host CLI tools (radiobench, impair)" ON)
 option(RADIO_WITH_OPUS "Build the Opus-dependent audio layer (M1)" OFF)
 option(RADIO_SANITIZE "Enable address+undefined sanitizers" OFF)
+option(RADIO_BUILD_FUZZERS "Build libFuzzer targets (needs a clang shipping libFuzzer)" OFF)
 option(RADIO_SANITIZE_THREAD "Enable thread sanitizer (excludes RADIO_SANITIZE)" OFF)
 
 # Cross-compiled targets (Android, iOS) build the core only. They exist to prove
@@ -90,4 +91,5 @@ message(STATUS "  tests      : ${RADIO_BUILD_TESTS}")
 message(STATUS "  tools      : ${RADIO_BUILD_TOOLS}")
 message(STATUS "  opus       : ${RADIO_WITH_OPUS}")
 message(STATUS "  sanitizers : asan/ubsan=${RADIO_SANITIZE} tsan=${RADIO_SANITIZE_THREAD}")
+message(STATUS "  fuzzers    : ${RADIO_BUILD_FUZZERS}")
 message(STATUS "")
