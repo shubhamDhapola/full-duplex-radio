@@ -8,10 +8,10 @@ buffering, and measured latency.
 
 | | |
 |---|---|
-| Tests | 99 passing, zero warnings under `-Wconversion -Wsign-conversion -Wold-style-cast` |
+| Tests | 115 passing, zero warnings under `-Wconversion -Wsign-conversion -Wold-style-cast` |
 | Sanitizers | clean under ASan + UBSan |
 | Language | C++20 (core), Kotlin (Android, M2), Swift (iOS, M9) |
-| Committed | ~4,700 lines across core, protocol spec, decisions |
+| Committed | ~5,300 lines across core, protocol spec, decisions |
 
 ## Verify
 
@@ -50,6 +50,7 @@ against the proxy's ground truth**.
 - [x] `radio/endpoint.hpp` — address+port value type, no socket headers in the interface, numeric-only parsing
 - [x] `radio/udp_socket.hpp` — RAII owning handle, move-only, non-blocking, immediate arrival timestamp, MSG_TRUNC detection
 - [x] `radio/pacer.hpp` — drift-free departure schedule with catch-up resync
+- [x] `radio/clock_sync.hpp` — NTP-style offset/RTT, min-RTT selection, uncertainty bound, coarse drift
 - [x] `docs/decisions/0001` — custom UDP transport instead of WebRTC
 
 ### Remaining
@@ -58,7 +59,6 @@ against the proxy's ground truth**.
 - [ ] Conformance test reading the vectors (the cross-platform interop contract)
 - [ ] libFuzzer entry point for the packet parser
 - [ ] `core/net` — receive loop driving socket + pacer together
-- [ ] `radio/clock_sync.hpp` — NTP-style offset/RTT estimator, min-RTT selection, outlier rejection
 - [ ] `radio/trace.hpp` — `TraceStamp` per-packet stage timestamps + JSONL sink
 - [ ] `tools/radiobench` — `pingpong`, `flood`, `recv`, `clocksync` modes
 - [ ] `tools/impair` — seeded proxy: delay, jitter distributions, i.i.d. + Gilbert-Elliott burst loss, reorder, duplicate, token-bucket rate limit, ground-truth event log

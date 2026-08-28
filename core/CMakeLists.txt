@@ -6,6 +6,7 @@
 add_library(radio_core STATIC
   src/proto/proto.cpp
   src/time/clock.cpp
+  src/time/clock_sync.cpp
   src/metrics/seq_tracker.cpp
   src/metrics/jitter_estimator.cpp
   src/metrics/histogram.cpp
@@ -24,6 +25,7 @@ target_sources(radio_core PRIVATE
   include/radio/bytes.hpp
   include/radio/endpoint.hpp
   include/radio/clock.hpp
+  include/radio/clock_sync.hpp
   include/radio/histogram.hpp
   include/radio/jitter_estimator.hpp
   include/radio/pacer.hpp

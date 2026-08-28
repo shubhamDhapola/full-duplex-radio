@@ -24,6 +24,7 @@ add_executable(radio_tests
   test_endpoint.cpp
   test_udp_socket.cpp
   test_pacer.cpp
+  test_clock_sync.cpp
 )
 
 target_link_libraries(radio_tests
