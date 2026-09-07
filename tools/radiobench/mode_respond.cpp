@@ -1,5 +1,6 @@
 #include <array>
 #include <cstdio>
+#include <cstring>
 
 #include "modes.hpp"
 #include "radio/jitter_estimator.hpp"
