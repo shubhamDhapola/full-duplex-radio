@@ -57,6 +57,10 @@ target_compile_definitions(radio_tests
   PRIVATE RADIO_TESTVECTORS_DIR="${CMAKE_SOURCE_DIR}/protocol/testvectors"
 )
 
+if(RADIO_WITH_OPUS)
+  target_sources(radio_tests PRIVATE test_opus_codec.cpp)
+endif()
+
 catch_discover_tests(radio_tests)
 
 # Optional coverage-guided fuzz target.

@@ -17,6 +17,14 @@ add_library(radio_core STATIC
   src/sim/impairment.cpp
 )
 
+if(RADIO_WITH_OPUS)
+  target_sources(radio_core PRIVATE
+    src/audio/opus_codec.cpp
+    include/radio/opus_codec.hpp
+  )
+  target_link_libraries(radio_core PUBLIC opus)
+endif()
+
 target_include_directories(radio_core PUBLIC include)
 target_link_libraries(radio_core PRIVATE radio_warnings PUBLIC radio_sanitizers)
 

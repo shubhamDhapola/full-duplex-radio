@@ -132,6 +132,31 @@ jobs:
       - name: Verify the library links and initialises
         run: ./build-opus/core/opus_link_check
 
+      # The codec tests only exist in this configuration, and they are where the
+      # measured claims about FEC live.
+      - name: Test
+        run: ctest --test-dir build-opus --output-on-failure
+
+  opus-sanitizers:
+    name: opus + sanitizers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Configure
+        env:
+          CC: clang
+          CXX: clang++
+        run: |
+          cmake -B build-opus-san -G Ninja -DRADIO_WITH_OPUS=ON \
+            -DRADIO_SANITIZE=ON -DCMAKE_BUILD_TYPE=Debug
+
+      - run: cmake --build build-opus-san
+
+      - run: ctest --test-dir build-opus-san --output-on-failure
+
   cross-compile:
     name: cross-compile ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
