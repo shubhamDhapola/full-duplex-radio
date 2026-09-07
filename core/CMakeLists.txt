@@ -35,6 +35,7 @@ target_sources(radio_core PRIVATE
   include/radio/proto.hpp
   include/radio/seq_tracker.hpp
   include/radio/serial.hpp
+  include/radio/spsc_ring.hpp
   include/radio/trace.hpp
   include/radio/udp_socket.hpp
 )

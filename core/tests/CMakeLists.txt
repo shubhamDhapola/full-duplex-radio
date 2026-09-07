@@ -44,6 +44,7 @@ add_executable(radio_tests
   test_impairment.cpp
   test_conformance.cpp
   test_parser_stress.cpp
+  test_spsc_ring.cpp
 )
 
 target_link_libraries(radio_tests
