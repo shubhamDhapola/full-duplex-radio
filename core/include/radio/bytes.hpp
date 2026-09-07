@@ -81,4 +81,40 @@ constexpr void store_be64(std::byte* p, std::uint64_t v) noexcept {
   store_be32(p + 4, static_cast<std::uint32_t>(v & 0xFFFFFFFFu));
 }
 
+// Little-endian, for file formats.
+//
+// The network is big-endian by convention, and most file formats are the
+// opposite: RIFF/WAVE, BMP and TIFF-LE all store the least significant byte
+// first. Having both directions available as named functions is what keeps that
+// distinction visible at the call site -- code that reads a WAV header with
+// load_be32 produces plausible-looking nonsense rather than an error, and it is
+// a genuinely easy mistake to make in a codebase where one convention
+// dominates.
+//
+// Same construction as the big-endian versions, and the same reasons: no
+// alignment assumption, no aliasing violation, no dependence on the host's own
+// byte order. See the note above.
+
+[[nodiscard]] constexpr std::uint16_t load_le16(const std::byte* p) noexcept {
+  using detail::u8;
+  return static_cast<std::uint16_t>(u8(p[0]) | (u8(p[1]) << 8));
+}
+
+[[nodiscard]] constexpr std::uint32_t load_le32(const std::byte* p) noexcept {
+  using detail::u8;
+  return u8(p[0]) | (u8(p[1]) << 8) | (u8(p[2]) << 16) | (u8(p[3]) << 24);
+}
+
+constexpr void store_le16(std::byte* p, std::uint16_t v) noexcept {
+  p[0] = static_cast<std::byte>(v & 0xFF);
+  p[1] = static_cast<std::byte>((v >> 8) & 0xFF);
+}
+
+constexpr void store_le32(std::byte* p, std::uint32_t v) noexcept {
+  p[0] = static_cast<std::byte>(v & 0xFF);
+  p[1] = static_cast<std::byte>((v >> 8) & 0xFF);
+  p[2] = static_cast<std::byte>((v >> 16) & 0xFF);
+  p[3] = static_cast<std::byte>((v >> 24) & 0xFF);
+}
+
 }  // namespace radio

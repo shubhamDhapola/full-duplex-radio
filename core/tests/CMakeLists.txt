@@ -45,6 +45,7 @@ add_executable(radio_tests
   test_conformance.cpp
   test_parser_stress.cpp
   test_spsc_ring.cpp
+  test_wav.cpp
 )
 
 target_link_libraries(radio_tests

@@ -137,6 +137,25 @@ jobs:
       - name: Test
         run: ctest --test-dir build-opus --output-on-failure
 
+      # Configuring twice must register the same tests.
+      #
+      # Opus enables its own suite on `OPUS_BUILD_TESTING OR BUILD_TESTING`, and
+      # include(CTest) puts BUILD_TESTING=ON in the cache -- so a first configure
+      # was clean while every one after it pulled in upstream's tests, several of
+      # which fail here for want of test vectors. A build that behaves
+      # differently the second time it is configured is worth a guard.
+      - name: Configure is idempotent
+        run: |
+          before=$(ctest --test-dir build-opus -N | grep 'Total Tests:' | awk '{print $3}')
+          cmake -B build-opus -G Ninja -DRADIO_WITH_OPUS=ON \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          cmake --build build-opus
+          after=$(ctest --test-dir build-opus -N | grep 'Total Tests:' | awk '{print $3}')
+          echo "registered tests: $before then $after"
+          test "$before" = "$after"
+          test "$(ctest --test-dir build-opus -N | grep -c 'test_opus_api' || true)" = "0"
+          ctest --test-dir build-opus --output-on-failure
+
   opus-sanitizers:
     name: opus + sanitizers
     runs-on: ubuntu-latest

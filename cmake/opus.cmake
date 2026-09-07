@@ -39,7 +39,36 @@ set(OPUS_DRED      OFF CACHE BOOL "" FORCE)
 set(OPUS_OSCE      OFF CACHE BOOL "" FORCE)
 set(OPUS_DEEP_PLC  OFF CACHE BOOL "" FORCE)
 
+# Opus turns its own test suite on if EITHER its option or the generic
+# BUILD_TESTING is set:
+#
+#     if(OPUS_BUILD_TESTING OR BUILD_TESTING)
+#       set(OPUS_BUILD_TESTING ON)
+#
+# and this project calls include(CTest), which sets BUILD_TESTING=ON in the
+# cache. So OPUS_BUILD_TESTING=OFF above is not sufficient on its own.
+#
+# Worse, it was order-dependent: on a first configure the cache has no
+# BUILD_TESTING yet and Opus's tests stayed off, but on every configure after
+# that the cached ON turned them on. A build that behaves differently the second
+# time it is configured is a trap, so shadow the variable for the duration of
+# the subdirectory rather than relying on ordering.
+#
+# Upstream's tests are not ours to validate, they add minutes to a cold build,
+# and several need test vectors that are not fetched here. Our own coverage is
+# opus_link_check plus core/tests/test_opus_codec.cpp.
+# A normal variable shadows the cache entry for the duration of the
+# subdirectory, then unset() removes the shadow so the cache value shows through
+# again. Restoring it with set() instead would leave a normal variable behind
+# that shadows the cache permanently -- which breaks include(CTest), because it
+# then sees BUILD_TESTING already defined and never creates the cache option its
+# test registration depends on. The first attempt at this fix did exactly that
+# and silently reduced our own suite to zero registered tests.
+set(BUILD_TESTING OFF)
+
 FetchContent_MakeAvailable(opus)
+
+unset(BUILD_TESTING)
 
 # Opus builds with its own flags, but its headers are reached through our
 # targets, so mark them SYSTEM. Without this our -Wall -Wextra -Wconversion set

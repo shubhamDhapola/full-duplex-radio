@@ -11,6 +11,7 @@ add_library(radio_core STATIC
   src/metrics/jitter_estimator.cpp
   src/metrics/histogram.cpp
   src/metrics/trace.cpp
+  src/audio/wav.cpp
   src/net/endpoint.cpp
   src/net/udp_socket.cpp
   src/net/pacer.cpp
@@ -46,6 +47,7 @@ target_sources(radio_core PRIVATE
   include/radio/spsc_ring.hpp
   include/radio/trace.hpp
   include/radio/udp_socket.hpp
+  include/radio/wav.hpp
 )
 
 set_target_properties(radio_core PROPERTIES
