@@ -42,3 +42,11 @@ target_sources(radio_core PRIVATE
 set_target_properties(radio_core PROPERTIES
   POSITION_INDEPENDENT_CODE ON  # required once Android links this into a .so
 )
+
+# Linkage check for the Opus dependency, built only when it is enabled. Kept
+# outside core/tests so it does not depend on Catch2 and so it can be
+# cross-compiled as a bare executable.
+if(RADIO_WITH_OPUS)
+  add_executable(opus_link_check tests/opus_link_check.cpp)
+  target_link_libraries(opus_link_check PRIVATE opus radio_warnings)
+endif()

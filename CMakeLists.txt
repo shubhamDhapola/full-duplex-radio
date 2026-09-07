@@ -72,6 +72,10 @@ if(RADIO_SANITIZE_THREAD)
   target_link_options(radio_sanitizers INTERFACE -fsanitize=thread)
 endif()
 
+if(RADIO_WITH_OPUS)
+  include(cmake/opus.cmake)
+endif()
+
 add_subdirectory(core)
 
 if(RADIO_BUILD_TOOLS)

@@ -109,6 +109,29 @@ jobs:
           python3 protocol/testvectors/generate.py
           git diff --exit-code protocol/testvectors/vectors.json
 
+  opus:
+    name: opus dependency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      # Pinned by SHA256, so a configure failure here means the upstream tarball
+      # changed or the mirror is serving something else -- both worth failing on.
+      - name: Configure with Opus
+        env:
+          CC: clang
+          CXX: clang++
+        run: |
+          cmake -B build-opus -G Ninja -DRADIO_WITH_OPUS=ON \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo
+
+      - run: cmake --build build-opus
+
+      - name: Verify the library links and initialises
+        run: ./build-opus/core/opus_link_check
+
   cross-compile:
     name: cross-compile ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
@@ -142,6 +165,7 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake" \
             -DANDROID_ABI=arm64-v8a \
             -DANDROID_PLATFORM=android-26 \
+            -DRADIO_WITH_OPUS=ON \
             -DCMAKE_BUILD_TYPE=Release
           cmake --build build-android
 
@@ -152,5 +176,6 @@ jobs:
             -DCMAKE_SYSTEM_NAME=iOS \
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
+            -DRADIO_WITH_OPUS=ON \
             -DCMAKE_BUILD_TYPE=Release
           cmake --build build-ios
