@@ -1,0 +1,156 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A superseded run tells you nothing, so cancel it rather than paying for it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, ${{ matrix.compiler }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            compiler: gcc
+            cc: gcc
+            cxx: g++
+          - os: ubuntu-latest
+            compiler: clang
+            cc: clang
+            cxx: clang++
+          - os: macos-latest
+            compiler: appleclang
+            cc: clang
+            cxx: clang++
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ninja (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Install Ninja (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja
+
+      - name: Configure
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  sanitizers:
+    name: sanitizers (asan + ubsan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      # Several tests are only meaningful here. The unaligned-load tests pass on
+      # x86 and arm64 even when the implementation is undefined behaviour, so
+      # only -fsanitize=undefined turns them into a proof.
+      - name: Configure with sanitizers
+        env:
+          CC: clang
+          CXX: clang++
+        run: |
+          cmake -B build-san -G Ninja \
+            -DRADIO_SANITIZE=ON -DCMAKE_BUILD_TYPE=Debug
+
+      - run: cmake --build build-san
+
+      - run: ctest --test-dir build-san --output-on-failure
+
+  format:
+    name: clang-format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned, because an unpinned clang-format will disagree with itself
+      # across releases and turn the check into noise.
+      - run: pip install clang-format==20.1.7
+
+      - name: Check formatting
+        run: |
+          clang-format --dry-run --Werror $(git ls-files '*.cpp' '*.hpp')
+
+  conformance-vectors:
+    name: vectors match their generator
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # protocol/testvectors/generate.py is an independent implementation of the
+      # wire format, written from the specification rather than from the C++
+      # encoder. This proves the committed vectors are still what it produces,
+      # so nobody can hand-edit a vector to make a failing test pass.
+      - name: Regenerate and diff
+        run: |
+          python3 protocol/testvectors/generate.py
+          git diff --exit-code protocol/testvectors/vectors.json
+
+  cross-compile:
+    name: cross-compile ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: android-arm64
+            os: ubuntu-latest
+          - target: ios-arm64
+            os: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ninja (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Install Ninja (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja
+
+      # The core has no platform dependencies beyond POSIX sockets, and both
+      # mobile targets are kept building from M0 so portability cannot rot
+      # before the apps that need it exist.
+      - name: Build core for Android arm64
+        if: matrix.target == 'android-arm64'
+        run: |
+          test -n "$ANDROID_NDK_ROOT" || { echo "ANDROID_NDK_ROOT unset"; exit 1; }
+          cmake -B build-android -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-26 \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-android
+
+      - name: Build core for iOS arm64
+        if: matrix.target == 'ios-arm64'
+        run: |
+          cmake -B build-ios -G Ninja \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-ios
