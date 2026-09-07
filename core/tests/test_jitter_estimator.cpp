@@ -44,8 +44,8 @@ TEST_CASE("perfectly paced arrivals produce zero jitter") {
   std::vector<std::uint32_t> ts;
   std::vector<Micros> arr;
   for (std::uint32_t i = 0; i < 50; ++i) {
-    ts.push_back(i * kFrameSamples);            // +960 samples per frame
-    arr.push_back(100'000 + i * 20'000);        // +20 ms per frame
+    ts.push_back(i * kFrameSamples);      // +960 samples per frame
+    arr.push_back(100'000 + i * 20'000);  // +20 ms per frame
   }
   run(j, ts, arr);
 
@@ -123,8 +123,9 @@ TEST_CASE("timestamp wrap does not corrupt the estimate") {
   // the estimate would never recover.
   JitterEstimator j;
   const std::uint32_t start = 0xFFFFFFFFu - 960u;
-  run(j, {start, static_cast<std::uint32_t>(start + 960u),
-          static_cast<std::uint32_t>(start + 1920u)},
+  run(j,
+      {start, static_cast<std::uint32_t>(start + 960u),
+       static_cast<std::uint32_t>(start + 1920u)},
       {100'000, 120'000, 140'000});
 
   CHECK(j.samples() == 2);
@@ -172,7 +173,7 @@ TEST_CASE("the peak is retained while the average decays") {
   run(j, {0, 960}, {100'000, 100'000 + 20'000});
   j.observe(1920, 140'000 + 60'000);  // one 60 ms excursion
   const std::int64_t peak = j.peak_abs_delta_samples();
-  REQUIRE(peak == 2880);              // 60 ms at 48 kHz
+  REQUIRE(peak == 2880);  // 60 ms at 48 kHz
 
   // Forty well-behaved packets later the average has decayed away...
   Micros t = 200'000;
@@ -183,7 +184,8 @@ TEST_CASE("the peak is retained while the average decays") {
     j.observe(ts, t);
   }
   CHECK(j.jitter_samples() < 100.0);
-  CHECK(j.peak_abs_delta_samples() == peak);  // ...but the peak is still visible
+  CHECK(j.peak_abs_delta_samples() ==
+        peak);  // ...but the peak is still visible
 }
 
 TEST_CASE("reset returns the estimator to its initial state") {

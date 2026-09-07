@@ -114,7 +114,8 @@ class UdpSocket {
   // when no datagram is waiting.
   [[nodiscard]] RecvResult recv_from(ByteSpan buffer) noexcept;
 
-  [[nodiscard]] SendResult send_to(const Endpoint& to, ByteView payload) noexcept;
+  [[nodiscard]] SendResult send_to(const Endpoint& to,
+                                   ByteView payload) noexcept;
 
   // Blocks until a datagram is readable or the timeout expires. A negative
   // timeout waits indefinitely. This is the only blocking call in the class,
@@ -142,7 +143,8 @@ class UdpSocket {
   // The multi-socket poll helper below is the only thing outside the class that
   // needs the descriptor, and it needs it purely to hand to poll().
   friend int wait_any_readable(std::span<UdpSocket* const> sockets,
-                               std::span<bool> readable, int timeout_ms) noexcept;
+                               std::span<bool> readable,
+                               int timeout_ms) noexcept;
 
   int fd_ = -1;
   int last_error_ = 0;
@@ -158,8 +160,8 @@ class UdpSocket {
 //
 // This lives in the core rather than in the tool so the file descriptor stays
 // private to UdpSocket -- exposing a native_handle() accessor would let any
-// caller bypass the class's invariants, and the only thing anyone actually needs
-// is this.
+// caller bypass the class's invariants, and the only thing anyone actually
+// needs is this.
 //
 // `readable` must be the same length as `sockets` and is filled in on return.
 // Returns the number readable, 0 on timeout, or -1 on error. At most
@@ -167,7 +169,7 @@ class UdpSocket {
 inline constexpr std::size_t kMaxPolledSockets = 16;
 
 [[nodiscard]] int wait_any_readable(std::span<UdpSocket* const> sockets,
-                                   std::span<bool> readable,
-                                   int timeout_ms) noexcept;
+                                    std::span<bool> readable,
+                                    int timeout_ms) noexcept;
 
 }  // namespace radio::net

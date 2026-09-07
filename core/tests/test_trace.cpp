@@ -27,10 +27,12 @@ std::string render(const TraceBuffer& buffer, Writer writer) {
 }
 
 std::string to_csv(const TraceBuffer& b) {
-  return render(b, [](const TraceBuffer& x, std::FILE* f) { return x.write_csv(f); });
+  return render(
+      b, [](const TraceBuffer& x, std::FILE* f) { return x.write_csv(f); });
 }
 std::string to_jsonl(const TraceBuffer& b) {
-  return render(b, [](const TraceBuffer& x, std::FILE* f) { return x.write_jsonl(f); });
+  return render(
+      b, [](const TraceBuffer& x, std::FILE* f) { return x.write_jsonl(f); });
 }
 
 TraceRecord make(std::uint32_t sequence, Micros sent, Micros received) {
@@ -119,8 +121,8 @@ TEST_CASE("a full buffer overwrites the oldest and says so") {
 }
 
 TEST_CASE("wrapping exactly once leaves the order correct") {
-  // The off-by-one-lap case, same shape as the SeqTracker window bug in
-  // lesson 05: the read cursor has to follow the write cursor round.
+  // The off-by-one-lap case, the same shape as SeqTracker's sliding window:
+  // the read cursor has to follow the write cursor round.
   TraceBuffer buffer(4);
   for (std::uint32_t i = 0; i < 4; ++i) buffer.record(make(i, i, i));
   CHECK(buffer[0].sequence == 0);
@@ -181,9 +183,10 @@ TEST_CASE("JSONL emits one object per record and omits absent stages") {
   buffer.record(make(2, 1'020, 2'020));
   const auto jsonl = to_jsonl(buffer);
 
-  CHECK(jsonl ==
-        "{\"stream_id\":43981,\"sequence\":1,\"sent\":1000,\"received\":2000}\n"
-        "{\"stream_id\":43981,\"sequence\":2,\"sent\":1020,\"received\":2020}\n");
+  CHECK(
+      jsonl ==
+      "{\"stream_id\":43981,\"sequence\":1,\"sent\":1000,\"received\":2000}\n"
+      "{\"stream_id\":43981,\"sequence\":2,\"sent\":1020,\"received\":2020}\n");
 
   // Omission, not null: a consumer checks for the key's presence.
   CHECK(jsonl.find("null") == std::string::npos);

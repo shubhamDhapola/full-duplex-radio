@@ -44,17 +44,19 @@ void report_human(const Options& options, const SendStats& stats,
   if (seconds > 0.0) {
     std::printf("  actual rate    %.2f pps  (requested %u)\n",
                 static_cast<double>(stats.sent) / seconds, options.rate_pps);
-    std::printf("  wire bitrate   %.1f kbps  (%u byte payload + 16 byte header)\n",
-                static_cast<double>(counters.bytes_sent) * 8.0 / seconds / 1000.0,
-                options.payload_bytes);
+    std::printf(
+        "  wire bitrate   %.1f kbps  (%u byte payload + 16 byte header)\n",
+        static_cast<double>(counters.bytes_sent) * 8.0 / seconds / 1000.0,
+        options.payload_bytes);
   }
 
   // A non-zero resync count means the send thread was starved for longer than
   // two frame intervals. That is a finding about scheduling, not a curiosity:
   // the frames due during the stall were never sent.
   if (pacer.resyncs() != 0) {
-    std::printf("  PACER RESYNCS  %llu  (send thread starved; frames dropped)\n",
-                static_cast<unsigned long long>(pacer.resyncs()));
+    std::printf(
+        "  PACER RESYNCS  %llu  (send thread starved; frames dropped)\n",
+        static_cast<unsigned long long>(pacer.resyncs()));
   } else {
     std::printf("  pacer          on schedule, no resyncs\n");
   }
@@ -63,8 +65,9 @@ void report_human(const Options& options, const SendStats& stats,
     std::printf("  trace          %zu records -> %s\n", trace.size(),
                 options.trace_path.c_str());
     if (trace.overwritten() != 0) {
-      std::printf("  TRACE TRUNCATED %llu records overwritten; raise capacity\n",
-                  static_cast<unsigned long long>(trace.overwritten()));
+      std::printf(
+          "  TRACE TRUNCATED %llu records overwritten; raise capacity\n",
+          static_cast<unsigned long long>(trace.overwritten()));
     }
   }
   std::printf("\n");
@@ -110,10 +113,11 @@ int run_send(const Options& options) {
     return 1;
   }
 
-  // Spec section 3.3 requires random starting values for stream id, sequence and
-  // timestamp. Seeding from --seed makes a run byte-for-byte reproducible, which
-  // is what lets an A/B comparison through the impairment proxy attribute a
-  // difference to the change under test rather than to a different packet stream.
+  // Spec section 3.3 requires random starting values for stream id, sequence
+  // and timestamp. Seeding from --seed makes a run byte-for-byte reproducible,
+  // which is what lets an A/B comparison through the impairment proxy attribute
+  // a difference to the change under test rather than to a different packet
+  // stream.
   std::mt19937 generator{options.seed.has_value() ? *options.seed
                                                   : std::random_device{}()};
   std::uniform_int_distribution<std::uint32_t> any32{0, 0xFFFFFFFFu};
@@ -128,8 +132,7 @@ int run_send(const Options& options) {
     payload[i] = static_cast<std::byte>(0x40u + (i % 0x30u));
   }
 
-  const auto interval_us =
-      static_cast<Micros>(1'000'000ull / options.rate_pps);
+  const auto interval_us = static_cast<Micros>(1'000'000ull / options.rate_pps);
   // Samples per frame follows the packet rate so the timestamp advances at the
   // media clock rate, exactly as a real encoder would drive it.
   const auto samples_per_frame = kSampleRateHz / options.rate_pps;
@@ -139,7 +142,8 @@ int run_send(const Options& options) {
 
   const auto expected_packets =
       static_cast<std::size_t>(options.duration_s *
-                               static_cast<double>(options.rate_pps)) + 64;
+                               static_cast<double>(options.rate_pps)) +
+      64;
   TraceBuffer trace(options.trace_path.empty() ? 1 : expected_packets);
 
   SendStats stats;
@@ -180,7 +184,8 @@ int run_send(const Options& options) {
     }
 
     ++stats.attempted;
-    const auto sent = socket.send_to(options.peer, ByteView{outgoing.data(), length});
+    const auto sent =
+        socket.send_to(options.peer, ByteView{outgoing.data(), length});
     record.mark(Stage::Sent, now_us());
 
     if (sent.ok()) {

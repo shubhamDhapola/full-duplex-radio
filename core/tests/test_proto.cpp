@@ -36,8 +36,8 @@ std::vector<std::byte> control_datagram(Type type, std::size_t body_bytes = 0) {
   d[0] = B(kVersion);
   d[1] = static_cast<std::byte>(type);
   store_be16(d.data() + 2, 0);
-  store_be32(d.data() + 4, 0xABCDEF01u);              // request_id
-  store_be64(d.data() + 8, 0x0102030405060708ull);    // send_time_us
+  store_be32(d.data() + 4, 0xABCDEF01u);            // request_id
+  store_be64(d.data() + 8, 0x0102030405060708ull);  // send_time_us
   return d;
 }
 
@@ -106,9 +106,8 @@ TEST_CASE("the header layout matches the specification byte for byte") {
 }
 
 TEST_CASE("peek_type classifies from the four-byte prefix alone") {
-  std::array<std::byte, 4> prefix{B(kVersion),
-                                  static_cast<std::byte>(Type::Ping), B(0),
-                                  B(0)};
+  std::array<std::byte, 4> prefix{
+      B(kVersion), static_cast<std::byte>(Type::Ping), B(0), B(0)};
   const auto t = peek_type(prefix);
   REQUIRE(t.ok());
   CHECK(t.value == Type::Ping);
@@ -245,15 +244,14 @@ TEST_CASE("a PONG carries the two timestamps the prober cannot know") {
   const std::uint64_t t3 = pkt.value.header.send_time_us;
   const std::uint64_t t4 = 1'000'600ull;
 
-  const auto rtt = static_cast<std::int64_t>(t4 - t1) -
-                   static_cast<std::int64_t>(t3 - t2);
-  const auto offset = (static_cast<std::int64_t>(t2) -
-                       static_cast<std::int64_t>(t1) +
-                       static_cast<std::int64_t>(t3) -
-                       static_cast<std::int64_t>(t4)) /
-                      2;
-  CHECK(rtt == 570);      // 600 total, minus 30 spent inside the responder
-  CHECK(offset == 165);   // responder's clock runs 165 us ahead
+  const auto rtt =
+      static_cast<std::int64_t>(t4 - t1) - static_cast<std::int64_t>(t3 - t2);
+  const auto offset =
+      (static_cast<std::int64_t>(t2) - static_cast<std::int64_t>(t1) +
+       static_cast<std::int64_t>(t3) - static_cast<std::int64_t>(t4)) /
+      2;
+  CHECK(rtt == 570);     // 600 total, minus 30 spent inside the responder
+  CHECK(offset == 165);  // responder's clock runs 165 us ahead
 }
 
 TEST_CASE("a PONG body must be exactly the specified length") {

@@ -76,7 +76,8 @@ TEST_CASE("the documented precision bound actually holds") {
     const std::uint64_t upper = Histogram::bucket_upper_bound(index);
 
     REQUIRE(upper >= v);  // never understates
-    const double error = static_cast<double>(upper - v) / static_cast<double>(v);
+    const double error =
+        static_cast<double>(upper - v) / static_cast<double>(v);
     REQUIRE(error <= Histogram::kRelativeError);
   }
   CHECK(Histogram::kRelativeError <= 0.032);  // ~3.1%
@@ -86,8 +87,8 @@ TEST_CASE("percentiles find the tail that a mean would hide") {
   // The reason this class exists. 990 packets at 10 ms and 10 packets at 500 ms
   // is a call with an audible problem, but the mean barely moves.
   Histogram h;
-  for (int i = 0; i < 990; ++i) h.record(10'000);   // 10 ms
-  for (int i = 0; i < 10; ++i) h.record(500'000);   // 500 ms
+  for (int i = 0; i < 990; ++i) h.record(10'000);  // 10 ms
+  for (int i = 0; i < 10; ++i) h.record(500'000);  // 500 ms
 
   CHECK(h.count() == 1000);
   CHECK(h.mean() == Approx(14'900.0));  // mean says "15 ms, looks fine"

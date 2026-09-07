@@ -99,7 +99,8 @@ TEST_CASE("a datagram survives a loopback round trip intact") {
   CHECK(received.from.family() == Endpoint::Family::V4);
 }
 
-TEST_CASE("receiving from an empty socket returns EAGAIN rather than blocking") {
+TEST_CASE(
+    "receiving from an empty socket returns EAGAIN rather than blocking") {
   // The proof that the socket is non-blocking. A blocking recvfrom would park
   // the thread here and this test would hang instead of failing.
   UdpSocket s;
@@ -143,8 +144,8 @@ TEST_CASE("wait_readable honours its timeout when nothing arrives") {
   CHECK_FALSE(s.wait_readable(20));
   const Micros elapsed = now_us() - start;
 
-  CHECK(elapsed >= 15'000);   // waited roughly the requested time
-  CHECK(elapsed < 500'000);   // and returned rather than hanging
+  CHECK(elapsed >= 15'000);  // waited roughly the requested time
+  CHECK(elapsed < 500'000);  // and returned rather than hanging
 }
 
 TEST_CASE("an oversized datagram is truncated and the truncation is reported") {
@@ -223,7 +224,8 @@ TEST_CASE("closing is idempotent and leaves the object usable again") {
   CHECK(s.is_open());
 }
 
-TEST_CASE("sending to an unspecified endpoint fails without touching the wire") {
+TEST_CASE(
+    "sending to an unspecified endpoint fails without touching the wire") {
   UdpSocket s;
   REQUIRE(s.open(UdpSocket::Options{}));
 

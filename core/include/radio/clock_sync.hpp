@@ -49,11 +49,11 @@ namespace radio {
 // WHY THE BEST SAMPLE IS SELECTED, NOT AVERAGED
 //
 // The instinct is to average many samples to reduce noise. That is wrong here,
-// and the reason is worth internalising: averaging suppresses *zero-mean noise*,
-// but queueing delay is neither zero-mean nor symmetric. It is non-negative and
-// it accumulates on one direction of the path at a time. A burst of queueing on
-// the A->B leg pushes every affected sample's offset the same way, so averaging
-// bakes the bias in rather than cancelling it.
+// and the reason is worth internalising: averaging suppresses *zero-mean
+// noise*, but queueing delay is neither zero-mean nor symmetric. It is
+// non-negative and it accumulates on one direction of the path at a time. A
+// burst of queueing on the A->B leg pushes every affected sample's offset the
+// same way, so averaging bakes the bias in rather than cancelling it.
 //
 // The sample with the lowest RTT is the one that queued least, so it is closest
 // to pure propagation delay and therefore closest to the symmetry the estimator
@@ -104,7 +104,9 @@ class ClockSync {
   // The lowest-RTT sample currently in the window. This is the estimate to use.
   [[nodiscard]] Sample best() const noexcept;
 
-  [[nodiscard]] std::int64_t offset_us() const noexcept { return best().offset_us; }
+  [[nodiscard]] std::int64_t offset_us() const noexcept {
+    return best().offset_us;
+  }
   [[nodiscard]] std::int64_t rtt_us() const noexcept { return best().rtt_us; }
 
   // Worst-case error on offset_us(), from the unobservable path asymmetry.
@@ -127,7 +129,8 @@ class ClockSync {
   [[nodiscard]] bool has_drift_estimate() const noexcept;
   [[nodiscard]] double drift_ppm() const noexcept;
 
-  // RTT distribution, for the P50/P95/P99 that a mean would hide (lesson 07).
+  // RTT distribution. The selected sample answers "what is the offset"; this
+  // answers "what is this path like", which a mean would hide.
   [[nodiscard]] const Histogram& rtt_histogram() const noexcept {
     return rtt_histogram_;
   }

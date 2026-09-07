@@ -19,10 +19,10 @@ namespace radio {
 //
 //   2. Worse, and less obvious: the receiver sees the datagrams arrive clumped
 //      together. Its interarrival jitter estimator cannot tell "the sender
-//      bursted" from "the network delayed these", so it reports high jitter, and
-//      an adaptive jitter buffer responds by getting deeper. That extra depth is
-//      real added latency, paid on every frame for the rest of the call, to
-//      absorb variance the sender created.
+//      bursted" from "the network delayed these", so it reports high jitter,
+//      and an adaptive jitter buffer responds by getting deeper. That extra
+//      depth is real added latency, paid on every frame for the rest of the
+//      call, to absorb variance the sender created.
 //
 // So pacing is a latency optimisation, not politeness.
 //
@@ -52,10 +52,10 @@ namespace radio {
 // prevent -- and it is worse than the original burst, because those frames are
 // already late and will be discarded by the receiver's playout deadline anyway.
 //
-// So past a threshold the pacer gives up on the old schedule and resynchronises.
-// Frames that were due during the stall are simply not sent; in real-time media
-// that is the correct choice, because a frame delivered late is worth no more
-// than one never sent.
+// So past a threshold the pacer gives up on the old schedule and
+// resynchronises. Frames that were due during the stall are simply not sent; in
+// real-time media that is the correct choice, because a frame delivered late is
+// worth no more than one never sent.
 class Pacer {
  public:
   Pacer() noexcept = default;
@@ -83,9 +83,10 @@ class Pacer {
   // resynchronising if we have fallen further behind than max_catchup allows.
   //
   // The tolerance is measured against the schedule *after* advancing, so the
-  // resync condition is `now > next + interval + max_catchup`. A whole slot must
-  // therefore be missed before any resync happens, however tight the tolerance
-  // is set -- being merely late for the current slot is normal and is absorbed.
+  // resync condition is `now > next + interval + max_catchup`. A whole slot
+  // must therefore be missed before any resync happens, however tight the
+  // tolerance is set -- being merely late for the current slot is normal and is
+  // absorbed.
   void advance(Micros now_us) noexcept;
 
   // Times the schedule was abandoned because the sender fell too far behind.
@@ -94,7 +95,9 @@ class Pacer {
   [[nodiscard]] std::uint64_t resyncs() const noexcept { return resyncs_; }
 
   // Departures recorded.
-  [[nodiscard]] std::uint64_t departures() const noexcept { return departures_; }
+  [[nodiscard]] std::uint64_t departures() const noexcept {
+    return departures_;
+  }
 
  private:
   Micros interval_ = 0;

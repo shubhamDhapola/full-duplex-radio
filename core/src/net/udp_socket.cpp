@@ -19,10 +19,10 @@ namespace {
 // The reinterpret_cast to `sockaddr*` below is the one place this codebase uses
 // it. The socket API is defined in terms of a base `sockaddr` that callers pass
 // family-specific structs through, and there is no way to express that in
-// standard C++ without the cast. Every POSIX program does this; it is blessed by
-// practice rather than by the standard. Note the value is built in a correctly
-// typed local first and memcpy'd into the storage, so no field is ever *written*
-// through a punned pointer.
+// standard C++ without the cast. Every POSIX program does this; it is blessed
+// by practice rather than by the standard. Note the value is built in a
+// correctly typed local first and memcpy'd into the storage, so no field is
+// ever *written* through a punned pointer.
 
 bool to_sockaddr(const Endpoint& endpoint, sockaddr_storage& out,
                  socklen_t& out_len) noexcept {
@@ -312,7 +312,8 @@ int wait_any_readable(std::span<UdpSocket* const> sockets,
     return -1;
   }
 
-  // Fixed-size stack array: this runs on the relay's hot loop, so no allocation.
+  // Fixed-size stack array: this runs on the relay's hot loop, so no
+  // allocation.
   pollfd descriptors[kMaxPolledSockets]{};
   std::size_t polled = 0;
 

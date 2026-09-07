@@ -30,8 +30,7 @@ void JitterEstimator::observe(std::uint32_t timestamp,
   }
 
   // Arrival is on our own monotonic clock, so this is always non-negative.
-  const auto arrival_delta =
-      static_cast<std::int64_t>(arrival - prev_arrival_);
+  const auto arrival_delta = static_cast<std::int64_t>(arrival - prev_arrival_);
 
   // Timestamps are 32-bit and wrap, so this must be serial arithmetic rather
   // than plain subtraction (see serial.hpp). A stream that happened to start

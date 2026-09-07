@@ -115,9 +115,9 @@ TEST_CASE("the vector file itself is intact") {
   }
 
   // Every rejection class in the spec must be exercised.
-  CHECK(reject_classes ==
-        std::set<std::string>{"bad_length", "bad_version", "reserved_flag",
-                              "too_short", "unknown_type"});
+  CHECK(reject_classes == std::set<std::string>{"bad_length", "bad_version",
+                                                "reserved_flag", "too_short",
+                                                "unknown_type"});
   CHECK(accepted_types.count("audio") == 1);
   CHECK(accepted_types.count("ping") == 1);
   CHECK(accepted_types.count("pong") == 1);
@@ -195,7 +195,8 @@ TEST_CASE("every reject vector is rejected with the specified class") {
 
     const auto bytes = from_hex(vector.at("hex").get<std::string>());
     const ByteView datagram{bytes.data(), bytes.size()};
-    const auto expected = reject_from_name(vector.at("reject").get<std::string>());
+    const auto expected =
+        reject_from_name(vector.at("reject").get<std::string>());
 
     // No parser may accept it, whichever one is asked.
     CHECK_FALSE(proto::parse_media(datagram).ok());
@@ -236,8 +237,8 @@ TEST_CASE("re-encoding an accept vector reproduces its bytes exactly") {
     if (vector.at("type") == "audio") {
       const auto parsed = proto::parse_media(datagram);
       REQUIRE(parsed.ok());
-      written = proto::encode_media(parsed.value.header, parsed.value.payload,
-                                    out);
+      written =
+          proto::encode_media(parsed.value.header, parsed.value.payload, out);
     } else {
       const auto parsed = proto::parse_control(datagram);
       REQUIRE(parsed.ok());

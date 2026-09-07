@@ -67,27 +67,31 @@ void report_human(const Options& options, const PingStats& stats,
   // time; this does not. Conflating the two is how "ping is 3 ms" becomes a
   // claim about audio latency that the numbers do not support.
   const auto request = request_latency.snapshot();
-  std::printf("  request        p50 %.3f  p99 %.3f ms  (includes peer processing)\n",
-              ms(static_cast<std::int64_t>(request.p50)),
-              ms(static_cast<std::int64_t>(request.p99)));
+  std::printf(
+      "  request        p50 %.3f  p99 %.3f ms  (includes peer processing)\n",
+      ms(static_cast<std::int64_t>(request.p50)),
+      ms(static_cast<std::int64_t>(request.p99)));
 
   const auto best = sync.best();
   std::printf("  clock offset   %+.3f ms +/- %.3f ms  (peer minus local)\n",
               ms(best.offset_us), ms(sync.offset_uncertainty_us()));
-  std::printf("  selected from  rtt %.3f ms, the lowest of %llu accepted probes\n",
-              ms(best.rtt_us), static_cast<unsigned long long>(sync.accepted()));
+  std::printf(
+      "  selected from  rtt %.3f ms, the lowest of %llu accepted probes\n",
+      ms(best.rtt_us), static_cast<unsigned long long>(sync.accepted()));
 
   if (sync.has_drift_estimate()) {
     const double ppm = sync.drift_ppm();
     std::printf("  clock drift    %+.2f ppm  (%.1f ms per hour of call)\n", ppm,
                 ppm * 3'600.0 / 1'000.0);
   } else {
-    std::printf("  clock drift    baseline too short -- needs >= 10 s of probing\n");
+    std::printf(
+        "  clock drift    baseline too short -- needs >= 10 s of probing\n");
   }
 
   if (sync.rejected() != 0) {
-    std::printf("  REJECTED       %llu impossible exchanges -- check PONG matching\n",
-                static_cast<unsigned long long>(sync.rejected()));
+    std::printf(
+        "  REJECTED       %llu impossible exchanges -- check PONG matching\n",
+        static_cast<unsigned long long>(sync.rejected()));
   }
   if (stats.bad_echo != 0) {
     std::printf("  BAD ECHO       %llu replies echoed a t1 we never sent\n",
@@ -99,7 +103,8 @@ void report_human(const Options& options, const PingStats& stats,
   }
   std::printf(
       "\n  Note: one-way latency is not rtt/2. The offset above assumes a\n"
-      "  symmetric path, so any one-way figure carries +/- %.3f ms of error.\n\n",
+      "  symmetric path, so any one-way figure carries +/- %.3f ms of "
+      "error.\n\n",
       ms(sync.offset_uncertainty_us()));
 }
 
@@ -143,8 +148,7 @@ void report_json(const Options& options, const PingStats& stats,
       static_cast<unsigned long long>(request.p99),
       static_cast<long long>(best.offset_us),
       static_cast<long long>(sync.offset_uncertainty_us()),
-      static_cast<long long>(best.rtt_us),
-      drift);
+      static_cast<long long>(best.rtt_us), drift);
 }
 
 }  // namespace
@@ -165,8 +169,9 @@ int run_ping(const Options& options) {
   Histogram request_latency;
   PingStats stats;
 
-  // The probe interval is paced from a fixed schedule, so oversleep on one probe
-  // does not shift the rest -- the same reason the media path uses a pacer.
+  // The probe interval is paced from a fixed schedule, so oversleep on one
+  // probe does not shift the rest -- the same reason the media path uses a
+  // pacer.
   Pacer pacer(static_cast<Micros>(options.interval_ms) * 1'000ull);
 
   std::array<std::byte, proto::kMaxDatagram> outgoing{};
@@ -190,8 +195,10 @@ int run_ping(const Options& options) {
     const Micros t1 = now_us();
     header.send_time_us = t1;
 
-    const std::size_t length = proto::encode_control(header, ByteView{}, outgoing);
-    const auto sent = socket.send_to(options.peer, ByteView{outgoing.data(), length});
+    const std::size_t length =
+        proto::encode_control(header, ByteView{}, outgoing);
+    const auto sent =
+        socket.send_to(options.peer, ByteView{outgoing.data(), length});
     pacer.advance(now_us());
 
     if (!sent.ok()) {
@@ -202,14 +209,16 @@ int run_ping(const Options& options) {
     }
     ++stats.sent;
 
-    const Micros deadline = t1 + static_cast<Micros>(options.timeout_ms) * 1'000ull;
+    const Micros deadline =
+        t1 + static_cast<Micros>(options.timeout_ms) * 1'000ull;
     bool matched = false;
 
     while (!matched && !stop_requested()) {
       const Micros now = now_us();
       if (now >= deadline) break;
 
-      const auto remaining_ms = static_cast<int>((deadline - now) / 1'000ull) + 1;
+      const auto remaining_ms =
+          static_cast<int>((deadline - now) / 1'000ull) + 1;
       if (!socket.wait_readable(remaining_ms)) continue;
 
       const auto received = socket.recv_from(incoming);

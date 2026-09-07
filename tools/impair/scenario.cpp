@@ -15,8 +15,8 @@ std::string_view trim(std::string_view text) {
   while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) {
     text.remove_prefix(1);
   }
-  while (!text.empty() && (text.back() == ' ' || text.back() == '\t' ||
-                           text.back() == '\r')) {
+  while (!text.empty() &&
+         (text.back() == ' ' || text.back() == '\t' || text.back() == '\r')) {
     text.remove_suffix(1);
   }
   return text;
@@ -40,19 +40,25 @@ bool parse_integer(std::string_view text, T& out) {
 }
 
 bool parse_shape(std::string_view text, JitterShape& out) {
-  if (text == "none") out = JitterShape::None;
-  else if (text == "uniform") out = JitterShape::Uniform;
-  else if (text == "normal") out = JitterShape::Normal;
-  else if (text == "pareto") out = JitterShape::Pareto;
-  else return false;
+  if (text == "none")
+    out = JitterShape::None;
+  else if (text == "uniform")
+    out = JitterShape::Uniform;
+  else if (text == "normal")
+    out = JitterShape::Normal;
+  else if (text == "pareto")
+    out = JitterShape::Pareto;
+  else
+    return false;
   return true;
 }
 
 // Applies one key to one direction's impairment. Returns false for an unknown
 // key, so a typo in a scenario file is an error rather than a silently ignored
-// line -- a misspelled `loss_percnt` would otherwise produce a clean-looking run
-// with no loss at all.
-bool apply_key(Impairment& target, std::string_view key, std::string_view value) {
+// line -- a misspelled `loss_percnt` would otherwise produce a clean-looking
+// run with no loss at all.
+bool apply_key(Impairment& target, std::string_view key,
+               std::string_view value) {
   double number = 0.0;
 
   if (key == "base_delay_ms") {
@@ -111,8 +117,8 @@ bool load_scenario_file(const std::string& path, Scenario& out) {
 
     const auto equals = text.find('=');
     if (equals == std::string_view::npos) {
-      std::fprintf(stderr, "impair: %s:%d: expected key = value\n", path.c_str(),
-                   line_number);
+      std::fprintf(stderr, "impair: %s:%d: expected key = value\n",
+                   path.c_str(), line_number);
       return false;
     }
 
@@ -198,7 +204,8 @@ void describe(const Scenario& scenario, std::FILE* out) {
                  static_cast<double>(i.base_delay_us) / 1000.0,
                  static_cast<double>(i.jitter_us) / 1000.0,
                  radio::sim::to_string(i.jitter_shape));
-    if (i.loss_percent > 0.0) std::fprintf(out, ", loss %.2f%%", i.loss_percent);
+    if (i.loss_percent > 0.0)
+      std::fprintf(out, ", loss %.2f%%", i.loss_percent);
     if (i.burst_loss_percent > 0.0) {
       std::fprintf(out, ", burst %.2f%% x%.1f", i.burst_loss_percent,
                    i.burst_mean_length);
@@ -337,7 +344,7 @@ std::optional<Scenario> parse_arguments(int argc, char** argv) {
 
   scenario.listen = *radio::net::Endpoint::parse(
       scenario.forward.family() == radio::net::Endpoint::Family::V6 ? "::"
-                                                                   : "0.0.0.0",
+                                                                    : "0.0.0.0",
       listen_port);
   return scenario;
 }

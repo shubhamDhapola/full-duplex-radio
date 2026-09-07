@@ -105,19 +105,19 @@ TEST_CASE("the catch-up tolerance defaults to two intervals") {
 
 TEST_CASE("the tolerance can be set explicitly") {
   // The comparison is made against the schedule *after* it has been advanced:
-  // "having already moved on by one interval, am I still further behind than the
-  // tolerance allows?" So no resync can happen until a whole slot has been
+  // "having already moved on by one interval, am I still further behind than
+  // the tolerance allows?" So no resync can happen until a whole slot has been
   // missed, whatever the tolerance is set to.
   Pacer lenient(20'000, 1'000);
   lenient.start(0);
-  lenient.advance(0);        // next = 20'000
-  lenient.advance(21'500);   // next = 40'000, which is still in the future
+  lenient.advance(0);       // next = 20'000
+  lenient.advance(21'500);  // next = 40'000, which is still in the future
   CHECK(lenient.resyncs() == 0);
 
   Pacer strict(20'000, 1'000);
   strict.start(0);
-  strict.advance(0);         // next = 20'000
-  strict.advance(45'000);    // next = 40'000, and now is 5 ms past it
+  strict.advance(0);       // next = 20'000
+  strict.advance(45'000);  // next = 40'000, and now is 5 ms past it
   CHECK(strict.resyncs() == 1);
   CHECK(strict.next_departure_us() == 45'000);
 }

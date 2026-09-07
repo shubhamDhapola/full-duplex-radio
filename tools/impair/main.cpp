@@ -145,13 +145,14 @@ void report_human(const Scenario& scenario, const Direction& up,
     std::printf("  %-10s %llu in, %llu out\n", label,
                 static_cast<unsigned long long>(d.received),
                 static_cast<unsigned long long>(d.emitted));
-    std::printf("             dropped %llu total  (%.3f%%)"
-                "  independent %llu, burst %llu, rate %llu\n",
-                static_cast<unsigned long long>(d.engine.dropped_total()),
-                d.engine.measured_loss_fraction() * 100.0,
-                static_cast<unsigned long long>(c.dropped_independent),
-                static_cast<unsigned long long>(c.dropped_burst),
-                static_cast<unsigned long long>(c.dropped_rate_limit));
+    std::printf(
+        "             dropped %llu total  (%.3f%%)"
+        "  independent %llu, burst %llu, rate %llu\n",
+        static_cast<unsigned long long>(d.engine.dropped_total()),
+        d.engine.measured_loss_fraction() * 100.0,
+        static_cast<unsigned long long>(c.dropped_independent),
+        static_cast<unsigned long long>(c.dropped_burst),
+        static_cast<unsigned long long>(c.dropped_rate_limit));
     std::printf("             duplicated %llu, reordered %llu, bursts %llu\n",
                 static_cast<unsigned long long>(c.duplicated),
                 static_cast<unsigned long long>(c.reordered),
@@ -211,8 +212,9 @@ void report_json(const Scenario& scenario, const Direction& up,
               static_cast<unsigned long long>(scenario.seed));
   emit("upstream", up, false);
   emit("downstream", down, false);
-  std::printf(R"("log_events":%zu,"discarded_at_exit":%llu})" "\n", log_rows,
-              static_cast<unsigned long long>(discarded_at_exit));
+  std::printf(R"("log_events":%zu,"discarded_at_exit":%llu})"
+              "\n",
+              log_rows, static_cast<unsigned long long>(discarded_at_exit));
 }
 
 }  // namespace
@@ -282,10 +284,10 @@ int main(int argc, char** argv) {
   // Printed as the very last setup step, and flushed, so a harness can wait for
   // this line instead of guessing at a sleep.
   //
-  // This is not cosmetic. The first acceptance run of this tool appeared to lose
-  // 8 packets before the model saw them, and the cause was a 0.5 s sleep in the
-  // test script that was not long enough for process launch plus setup. A
-  // benchmark that races its own subject produces numbers that look like
+  // This is not cosmetic. The first acceptance run of this tool appeared to
+  // lose 8 packets before the model saw them, and the cause was a 0.5 s sleep
+  // in the test script that was not long enough for process launch plus setup.
+  // A benchmark that races its own subject produces numbers that look like
   // network loss, which is the worst possible failure mode for a measurement
   // tool.
   std::fprintf(stderr, "impair: ready\n");
@@ -325,7 +327,8 @@ int main(int argc, char** argv) {
       if (!slot.occupied) continue;
       if (slot.release_us <= now) {
         Direction& direction = slot.to_forward ? upstream : downstream;
-        const net::Endpoint& target = slot.to_forward ? scenario.forward : client;
+        const net::Endpoint& target =
+            slot.to_forward ? scenario.forward : client;
         if (target.valid()) {
           auto& socket = slot.to_forward ? forward_side : client_side;
           if (socket.send_to(target, ByteView{slot.data.data(), slot.length})
@@ -412,10 +415,10 @@ int main(int argc, char** argv) {
   //
   // This matters more than it looks. With Pareto jitter a single packet can sit
   // in the queue for over a second, so stopping the proxy the moment the sender
-  // finishes silently discards the tail -- and those discards then appear in the
-  // receiver's loss counter as network loss that the model never asked for. The
-  // first acceptance run of this tool reported 12 lost against a ground truth of
-  // 10 for exactly that reason.
+  // finishes silently discards the tail -- and those discards then appear in
+  // the receiver's loss counter as network loss that the model never asked for.
+  // The first acceptance run of this tool reported 12 lost against a ground
+  // truth of 10 for exactly that reason.
   //
   // Each packet is still released at its scheduled time, so draining does not
   // distort the delay distribution; it just refuses to stop early. The grace
@@ -488,8 +491,7 @@ int main(int argc, char** argv) {
   if (scenario.json) {
     report_json(scenario, upstream, downstream, log.size(), discarded_at_exit);
   } else {
-    report_human(scenario, upstream, downstream, log.size(),
-                 discarded_at_exit);
+    report_human(scenario, upstream, downstream, log.size(), discarded_at_exit);
   }
   return 0;
 }

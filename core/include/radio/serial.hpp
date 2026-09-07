@@ -33,12 +33,13 @@ namespace radio::serial {
 
 // Signed distance from `from` to `to`: positive if `to` is ahead.
 [[nodiscard]] constexpr std::int32_t distance(std::uint32_t from,
-                                             std::uint32_t to) noexcept {
+                                              std::uint32_t to) noexcept {
   return static_cast<std::int32_t>(to - from);
 }
 
 // True if `a` strictly precedes `b`.
-[[nodiscard]] constexpr bool precedes(std::uint32_t a, std::uint32_t b) noexcept {
+[[nodiscard]] constexpr bool precedes(std::uint32_t a,
+                                      std::uint32_t b) noexcept {
   return distance(a, b) > 0;
 }
 

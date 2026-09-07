@@ -14,8 +14,9 @@ namespace {
 using namespace radio;
 
 // Per-stream accounting, keyed on (peer, stream_id) exactly as spec section 3.2
-// requires. A fixed table because the packet path must not allocate; eight slots
-// is far more than M0 needs and M3 replaces this with the real peer table.
+// requires. A fixed table because the packet path must not allocate; eight
+// slots is far more than M0 needs and M3 replaces this with the real peer
+// table.
 constexpr std::size_t kMaxStreams = 8;
 
 struct StreamState {
@@ -44,8 +45,8 @@ struct RejectCounts {
 };
 
 StreamState* find_or_open(std::array<StreamState, kMaxStreams>& table,
-                         const net::Endpoint& peer, std::uint32_t stream_id,
-                         Micros now) {
+                          const net::Endpoint& peer, std::uint32_t stream_id,
+                          Micros now) {
   for (auto& slot : table) {
     if (slot.active && slot.stream_id == stream_id && slot.peer == peer) {
       return &slot;
@@ -128,10 +129,10 @@ void report_human(const net::UdpSocket& socket,
                 static_cast<unsigned long long>(sequence.reordered()));
     std::printf("    too old      %llu\n",
                 static_cast<unsigned long long>(sequence.too_old()));
-    std::printf("    jitter       %.3f ms mean, %.3f ms peak\n",
-                stream.jitter.jitter_ms(),
-                static_cast<double>(stream.jitter.peak_abs_delta_samples()) /
-                    48.0);
+    std::printf(
+        "    jitter       %.3f ms mean, %.3f ms peak\n",
+        stream.jitter.jitter_ms(),
+        static_cast<double>(stream.jitter.peak_abs_delta_samples()) / 48.0);
     if (seconds > 0.0) {
       std::printf("    bitrate      %.1f kbps over %.2f s\n",
                   static_cast<double>(stream.bytes) * 8.0 / seconds / 1000.0,
@@ -199,7 +200,8 @@ int run_respond(const Options& options) {
     return 1;
   }
 
-  std::fprintf(stderr, "radiobench respond: listening on %s (Ctrl-C to report)\n",
+  std::fprintf(stderr,
+               "radiobench respond: listening on %s (Ctrl-C to report)\n",
                socket.local_endpoint().to_string().c_str());
 
   std::array<StreamState, kMaxStreams> streams{};
@@ -250,9 +252,10 @@ int run_respond(const Options& options) {
         proto::ControlHeader header;
         header.type = proto::Type::Pong;
         header.request_id = packet.value.header.request_id;
-        // t3, taken as late as possible. The gap between recv_t2 and this is our
-        // own processing time, and the RTT formula subtracts it out -- so a slow
-        // responder does not inflate the peer's measurement of the network.
+        // t3, taken as late as possible. The gap between recv_t2 and this is
+        // our own processing time, and the RTT formula subtracts it out -- so a
+        // slow responder does not inflate the peer's measurement of the
+        // network.
         header.send_time_us = now_us();
 
         const std::size_t length =
@@ -264,7 +267,8 @@ int run_respond(const Options& options) {
 
         // A dropped PONG makes the peer record a timeout, so it must be counted
         // here or the loss looks like the peer's problem rather than ours.
-        if (socket.send_to(received.from, ByteView{outgoing.data(), length}).ok()) {
+        if (socket.send_to(received.from, ByteView{outgoing.data(), length})
+                .ok()) {
           ++pings;
         } else {
           ++pong_failed;
@@ -280,8 +284,8 @@ int run_respond(const Options& options) {
         }
 
         const auto& header = packet.value.header;
-        StreamState* stream = find_or_open(streams, received.from,
-                                           header.stream_id, received.arrival_us);
+        StreamState* stream = find_or_open(
+            streams, received.from, header.stream_id, received.arrival_us);
         if (stream == nullptr) {
           ++table_full;
           continue;
@@ -289,8 +293,8 @@ int run_respond(const Options& options) {
 
         stream->sequence.observe(header.sequence);
         // A talkspurt boundary re-anchors instead of contributing a sample: the
-        // timestamp jump across a silence reflects the pause, not the network
-        // (lesson 07).
+        // timestamp jump across a silence reflects how long the speaker paused,
+        // not anything the network did. See JitterEstimator::reanchor.
         if (header.talkspurt_start()) {
           stream->jitter.reanchor(header.timestamp, received.arrival_us);
         } else {

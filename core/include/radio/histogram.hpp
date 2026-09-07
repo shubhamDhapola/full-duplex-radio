@@ -11,11 +11,12 @@ namespace radio {
 //
 // WHY A HISTOGRAM AND NOT A MEAN
 //
-// Every number that matters in this project lives in the tail. A mean latency of
-// 45 ms tells you nothing about whether the call sounded good; a P99 of 210 ms
-// tells you 1 packet in 100 arrived too late to play. Averages actively mislead
-// here, because one 400 ms excursion in a thousand packets moves the mean by
-// 0.4 ms and is invisible — while being exactly the event the user heard.
+// Every number that matters in this project lives in the tail. A mean latency
+// of 45 ms tells you nothing about whether the call sounded good; a P99 of 210
+// ms tells you 1 packet in 100 arrived too late to play. Averages actively
+// mislead here, because one 400 ms excursion in a thousand packets moves the
+// mean by 0.4 ms and is invisible — while being exactly the event the user
+// heard.
 //
 // This is also why the jitter estimator's exponential average is not enough on
 // its own. A stream with J = 3 ms and an occasional 60 ms excursion looks
@@ -28,13 +29,14 @@ namespace radio {
 // Exact percentiles need the full sample set. For a benchmark run that is
 // affordable, but the same code has to run on the phone during a call, for
 // hours, per peer, per pipeline stage. Storage would grow without bound, and
-// the recording path would allocate — which is forbidden (lesson 01 §6).
+// the recording path would allocate, which is forbidden on any path that runs
+// per packet or per audio frame.
 //
 // WHY NOT FIXED-WIDTH BUCKETS
 //
 // 1 microsecond buckets covering 0..1 second is a million counters, 8 MB. And
-// the resolution is wrong at both ends: absurdly fine at 10 us, uselessly coarse
-// if a value ever reaches 10 seconds.
+// the resolution is wrong at both ends: absurdly fine at 10 us, uselessly
+// coarse if a value ever reaches 10 seconds.
 //
 // THE SCHEME USED HERE
 //
@@ -70,7 +72,8 @@ class Histogram {
       (64 - kPrecisionBits + 1) * kSubBuckets;
 
   // Worst-case relative error of any percentile answer.
-  static constexpr double kRelativeError = 1.0 / static_cast<double>(kSubBuckets);
+  static constexpr double kRelativeError =
+      1.0 / static_cast<double>(kSubBuckets);
 
   void record(std::uint64_t value) noexcept;
   void reset() noexcept;
@@ -112,7 +115,8 @@ class Histogram {
   // Exposed for tests, which need to verify the precision bound rather than
   // trust it.
   [[nodiscard]] static std::size_t bucket_index(std::uint64_t value) noexcept;
-  [[nodiscard]] static std::uint64_t bucket_upper_bound(std::size_t index) noexcept;
+  [[nodiscard]] static std::uint64_t bucket_upper_bound(
+      std::size_t index) noexcept;
 
  private:
   std::array<std::uint64_t, kBucketCount> buckets_{};

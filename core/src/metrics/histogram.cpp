@@ -12,8 +12,7 @@ std::size_t Histogram::bucket_index(std::uint64_t value) noexcept {
   // floor(log2(value)). std::countl_zero is C++20 <bit> and compiles to a
   // single CLZ/LZCNT instruction; the hand-rolled loop version of this is a
   // classic accidental hot spot.
-  const auto exponent =
-      static_cast<unsigned>(63 - std::countl_zero(value));
+  const auto exponent = static_cast<unsigned>(63 - std::countl_zero(value));
 
   // Which octave above the linear region, and where inside it. Shifting the
   // value down by `octave` keeps the top kPrecisionBits+1 bits, so `within`
@@ -32,8 +31,8 @@ std::uint64_t Histogram::bucket_upper_bound(std::size_t index) noexcept {
 
   const std::size_t octave = index / kSubBuckets - 1;
   const std::size_t within = index % kSubBuckets;
-  const std::uint64_t low =
-      static_cast<std::uint64_t>(kSubBuckets + within) << octave;
+  const std::uint64_t low = static_cast<std::uint64_t>(kSubBuckets + within)
+                            << octave;
   return low + (std::uint64_t{1} << octave) - 1;
 }
 
@@ -49,7 +48,8 @@ void Histogram::reset() noexcept { *this = Histogram{}; }
 
 void Histogram::merge(const Histogram& other) noexcept {
   if (other.count_ == 0) return;
-  for (std::size_t i = 0; i < kBucketCount; ++i) buckets_[i] += other.buckets_[i];
+  for (std::size_t i = 0; i < kBucketCount; ++i)
+    buckets_[i] += other.buckets_[i];
   count_ += other.count_;
   sum_ += other.sum_;
   if (other.min_ < min_) min_ = other.min_;

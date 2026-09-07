@@ -18,9 +18,9 @@ std::uint64_t splitmix64(std::uint64_t& state) noexcept {
 
 constexpr double kPi = 3.14159265358979323846;
 
-// Pareto tail index. 1.5 gives a distribution with a finite mean and an infinite
-// variance, which is a fair caricature of wireless delay: usually small, and
-// occasionally very large indeed.
+// Pareto tail index. 1.5 gives a distribution with a finite mean and an
+// infinite variance, which is a fair caricature of wireless delay: usually
+// small, and occasionally very large indeed.
 constexpr double kParetoAlpha = 1.5;
 
 // Normal draws are clamped so a single freak sample cannot produce a delay of
@@ -190,7 +190,7 @@ Micros ImpairmentEngine::draw_delay() noexcept {
 }
 
 bool ImpairmentEngine::rate_limit_allows(std::size_t bytes,
-                                        Micros now_us) noexcept {
+                                         Micros now_us) noexcept {
   if (config_.rate_bps == 0) return true;
 
   if (!bucket_started_) {
@@ -199,9 +199,10 @@ bool ImpairmentEngine::rate_limit_allows(std::size_t bytes,
   }
 
   // Refill proportional to elapsed time, capped at the bucket size. The cap is
-  // what makes this a *burst* allowance rather than unlimited credit for an idle
-  // link.
-  const auto elapsed = now_us > bucket_updated_us_ ? now_us - bucket_updated_us_ : 0;
+  // what makes this a *burst* allowance rather than unlimited credit for an
+  // idle link.
+  const auto elapsed =
+      now_us > bucket_updated_us_ ? now_us - bucket_updated_us_ : 0;
   bucket_updated_us_ = now_us;
   const double bytes_per_us = static_cast<double>(config_.rate_bps) / 8.0 / 1e6;
   bucket_tokens_ += static_cast<double>(elapsed) * bytes_per_us;

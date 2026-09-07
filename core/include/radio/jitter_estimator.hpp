@@ -90,8 +90,8 @@ class JitterEstimator {
  private:
   void anchor(std::uint32_t timestamp, Micros arrival_us) noexcept;
 
-  double jitter_ = 0.0;              // sample units
-  std::uint64_t prev_arrival_ = 0;   // sample units
+  double jitter_ = 0.0;             // sample units
+  std::uint64_t prev_arrival_ = 0;  // sample units
   std::uint32_t prev_timestamp_ = 0;
   std::int64_t last_delta_ = 0;
   std::int64_t peak_abs_delta_ = 0;

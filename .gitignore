@@ -1,8 +1,3 @@
-# Teaching notes. Deliberately untracked: these are learning material written
-# alongside the build, and a reviewer reading this repo should see the
-# engineering, not the lessons. See learn/README.md.
-/learn/
-
 # Build trees. `build` is the default; build-san / build-tsan / build-android /
 # build-ios are the conventional names used in docs and CI.
 /build*/

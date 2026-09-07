@@ -1,7 +1,7 @@
 // libFuzzer entry point for the packet parsers.
 //
-// Not built by default, and not buildable at all with AppleClang, which does not
-// ship libFuzzer. The portable equivalent that always runs in ctest is
+// Not built by default, and not buildable at all with AppleClang, which does
+// not ship libFuzzer. The portable equivalent that always runs in ctest is
 // test_parser_stress.cpp; this target exists for coverage-guided runs on a
 // toolchain that supports it.
 //
@@ -17,7 +17,8 @@
 //   python3 -c "import json,pathlib; \
 //     d=json.load(open('protocol/testvectors/vectors.json')); \
 //     p=pathlib.Path('corpus'); p.mkdir(exist_ok=True); \
-//     [ (p/v['name']).write_bytes(bytes.fromhex(v['hex'])) for v in d['vectors'] ]"
+//     [ (p/v['name']).write_bytes(bytes.fromhex(v['hex'])) for v in
+//     d['vectors'] ]"
 //   ./build-fuzz/core/tests/fuzz_proto corpus/
 #include <cstddef>
 #include <cstdint>
@@ -28,7 +29,8 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data,
                                       std::size_t size) {
   // reinterpret_cast from the fuzzer's uint8_t* is unavoidable and safe: the
   // bytes are being viewed as bytes.
-  const radio::ByteView datagram{reinterpret_cast<const std::byte*>(data), size};
+  const radio::ByteView datagram{reinterpret_cast<const std::byte*>(data),
+                                 size};
 
   volatile std::uint64_t sink = 0;
 

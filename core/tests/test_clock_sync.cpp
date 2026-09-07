@@ -68,9 +68,8 @@ TEST_CASE("RTT is exact no matter how far apart the clocks are") {
   // The offset cancels when the two legs are added, so RTT needs no
   // synchronisation at all -- the same algebraic cancellation the jitter
   // estimator relies on.
-  for (const std::int64_t offset :
-       {std::int64_t{0}, std::int64_t{-999'000'000},
-        std::int64_t{500'000'000'000}}) {
+  for (const std::int64_t offset : {std::int64_t{0}, std::int64_t{-999'000'000},
+                                    std::int64_t{500'000'000'000}}) {
     ClockSync sync;
     const auto sample = feed(sync, simulate(kBase, offset, 3'000, 3'000));
     REQUIRE(sample.valid);
@@ -185,8 +184,7 @@ TEST_CASE("self-inconsistent exchanges are rejected, not absorbed") {
 
   // The peer claims to have spent longer thinking than the whole exchange took,
   // which would make RTT negative.
-  CHECK_FALSE(
-      sync.observe(kBase, kBase, kBase + 50'000, kBase + 10'000).valid);
+  CHECK_FALSE(sync.observe(kBase, kBase, kBase + 50'000, kBase + 10'000).valid);
 
   CHECK(sync.rejected() == 3);
   CHECK(sync.accepted() == 0);
@@ -235,7 +233,8 @@ TEST_CASE("a drifting peer clock is detected and quantified") {
   CHECK(sync.drift_ppm() == Approx(static_cast<double>(kPpm)).margin(0.5));
 }
 
-TEST_CASE("drift is withheld until the baseline is long enough to mean anything") {
+TEST_CASE(
+    "drift is withheld until the baseline is long enough to mean anything") {
   // Each offset carries +/- rtt/2 of error, so a short baseline makes the slope
   // mostly noise. Reporting a number there would be worse than reporting none.
   ClockSync sync;
@@ -262,7 +261,7 @@ TEST_CASE("a stable pair of clocks reports no drift") {
 
 TEST_CASE("RTT percentiles are available, not just the best sample") {
   // The selected sample answers "what is the offset". The distribution answers
-  // "what is this path like", and a mean would hide the tail (lesson 07).
+  // "what is this path like", and a mean would hide the tail.
   ClockSync sync;
   Micros when = kBase;
   for (int i = 0; i < 100; ++i) {

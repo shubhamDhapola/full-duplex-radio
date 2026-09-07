@@ -18,8 +18,8 @@ bool parse_integer(std::string_view text, T& out) {
 }
 
 bool parse_double(std::string_view text, double& out) {
-  // from_chars for floating point is not available in libc++ of every version we
-  // target, so strtod with an explicit end check does the same job.
+  // from_chars for floating point is not available in libc++ of every version
+  // we target, so strtod with an explicit end check does the same job.
   std::string owned(text);
   char* end = nullptr;
   const double value = std::strtod(owned.c_str(), &end);
@@ -69,7 +69,7 @@ EXAMPLES
   radiobench ping --peer 127.0.0.1:47000 --count 50 --interval 100
   radiobench send --peer 127.0.0.1:47000 --rate 50 --duration 5 --seed 42
 )",
-                static_cast<unsigned>(kDefaultPort));
+               static_cast<unsigned>(kDefaultPort));
 }
 
 std::optional<Options> parse_options(int argc, char** argv) {
@@ -126,10 +126,11 @@ std::optional<Options> parse_options(int argc, char** argv) {
       if ((value = value_for(i, flag)) == nullptr) return std::nullopt;
       const auto parsed = radio::net::Endpoint::parse_with_port(value);
       if (!parsed) {
-        std::fprintf(stderr,
-                     "radiobench: could not parse peer '%s'. Expected a numeric "
-                     "address, e.g. 192.168.1.14:47000 or [fe80::1]:47000\n",
-                     value);
+        std::fprintf(
+            stderr,
+            "radiobench: could not parse peer '%s'. Expected a numeric "
+            "address, e.g. 192.168.1.14:47000 or [fe80::1]:47000\n",
+            value);
         return std::nullopt;
       }
       options.peer = *parsed;
@@ -187,7 +188,8 @@ std::optional<Options> parse_options(int argc, char** argv) {
     }
     if (flag == "--duration") {
       if ((value = value_for(i, flag)) == nullptr) return std::nullopt;
-      if (!parse_double(value, options.duration_s) || options.duration_s <= 0.0) {
+      if (!parse_double(value, options.duration_s) ||
+          options.duration_s <= 0.0) {
         std::fprintf(stderr, "radiobench: bad duration '%s'\n", value);
         return std::nullopt;
       }

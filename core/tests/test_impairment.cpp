@@ -129,8 +129,8 @@ TEST_CASE("independent loss converges on the requested rate") {
 }
 
 TEST_CASE("independent loss really is independent") {
-  // The control case for the burst model: with per-packet decisions the mean run
-  // of consecutive losses should be barely above 1.
+  // The control case for the burst model: with per-packet decisions the mean
+  // run of consecutive losses should be barely above 1.
   Impairment config;
   config.loss_percent = 5.0;
   ImpairmentEngine engine(config, 7);
@@ -192,7 +192,8 @@ TEST_CASE("burst clumping is dramatically different from independent loss") {
         Approx(bursty.measured_loss_fraction()).margin(0.01));
   // ...and a five-fold difference in how the losses arrive.
   CHECK(mean(bursty_lengths) > mean(independent_lengths) * 4.0);
-  // Also far fewer, larger outages: the same loss delivered as ~5x fewer events.
+  // Also far fewer, larger outages: the same loss delivered as ~5x fewer
+  // events.
   CHECK(bursty_lengths.size() * 4 < independent_lengths.size());
 }
 
@@ -231,13 +232,13 @@ TEST_CASE("uniform jitter stays centred on the base delay") {
   CHECK(total / kSamples == Approx(40'000.0).margin(200.0));
   CHECK(minimum >= 30'000);
   CHECK(maximum <= 50'000);
-  CHECK(minimum < 31'000);   // the full range is actually explored
+  CHECK(minimum < 31'000);  // the full range is actually explored
   CHECK(maximum > 49'000);
 }
 
 TEST_CASE("pareto jitter is one-sided and heavy-tailed") {
-  // The distinguishing property: a queue can delay a packet but never deliver it
-  // early, and the tail is what breaks a buffer sized from the mean.
+  // The distinguishing property: a queue can delay a packet but never deliver
+  // it early, and the tail is what breaks a buffer sized from the mean.
   Impairment config;
   config.base_delay_us = 10'000;
   config.jitter_us = 2'000;
@@ -255,8 +256,8 @@ TEST_CASE("pareto jitter is one-sided and heavy-tailed") {
 
   std::sort(delays.begin(), delays.end());
   const auto median = delays[delays.size() / 2];
-  const auto p999 =
-      delays[static_cast<std::size_t>(static_cast<double>(delays.size()) * 0.999)];
+  const auto p999 = delays[static_cast<std::size_t>(
+      static_cast<double>(delays.size()) * 0.999)];
 
   // Heavy tail: the 99.9th percentile is many times the median excess. A normal
   // distribution clamped at 3 sigma could not do this.
@@ -308,7 +309,8 @@ TEST_CASE("duplication emits a copy with an independently drawn delay") {
     const auto decision = engine.decide(kPacketBytes, 1'000'000);
     REQUIRE(decision.duplicate);
     if (decision.duplicate_delay_us < decision.delay_us) saw_copy_first = true;
-    if (decision.duplicate_delay_us > decision.delay_us) saw_original_first = true;
+    if (decision.duplicate_delay_us > decision.delay_us)
+      saw_original_first = true;
   }
   // A real duplicating link produces both orders, so the model must too.
   CHECK(saw_copy_first);

@@ -1,0 +1,31 @@
+# Applies to every editor that understands EditorConfig, so formatting is
+# consistent before clang-format ever runs.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+
+[*.{cpp,hpp,c,h}]
+indent_size = 2
+max_line_length = 80
+
+[*.{cmake,txt}]
+indent_size = 2
+
+[*.py]
+indent_size = 4
+max_line_length = 88
+
+[*.{yml,yaml,json}]
+indent_size = 2
+
+[*.md]
+# Trailing whitespace is significant in Markdown line breaks.
+trim_trailing_whitespace = false
+
+[Makefile]
+indent_style = tab

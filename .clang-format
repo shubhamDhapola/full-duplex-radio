@@ -1,0 +1,13 @@
+# Google style, which is what the codebase was written in: 2-space indent,
+# 80 columns, pointers bound to the type.
+#
+# 80 columns is deliberate rather than nostalgic. Most of this code is dense
+# arithmetic and bit manipulation, and a hard limit forces the intermediate
+# values to be named instead of buried in a long expression. Wide lines are also
+# unreviewable in a side-by-side diff.
+BasedOnStyle: Google
+Standard: c++20
+ColumnLimit: 80
+DerivePointerAlignment: false
+PointerAlignment: Left
+IncludeBlocks: Preserve

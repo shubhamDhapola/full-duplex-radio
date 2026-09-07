@@ -41,11 +41,11 @@ TEST_CASE("the worked example is classified correctly") {
   SeqTracker t;
   feed(t, {100, 101, 103, 102, 104, 104, 106, 105, 109});
 
-  CHECK(t.expected() == 10);     // span 100..109
-  CHECK(t.received() == 8);      // unique arrivals
+  CHECK(t.expected() == 10);  // span 100..109
+  CHECK(t.received() == 8);   // unique arrivals
   CHECK(t.duplicates() == 1);
   CHECK(t.reordered() == 2);
-  CHECK(t.lost() == 2);          // 107 and 108
+  CHECK(t.lost() == 2);  // 107 and 108
 
   // The naive "expected - arrivals" formula would have said 1, because the
   // duplicate 104 would have been counted as an arrival and papered over a
@@ -77,7 +77,8 @@ TEST_CASE("verdicts distinguish reordering from duplication") {
   CHECK(t.lost() == 0);
 }
 
-TEST_CASE("a reordered packet older than the window is not called a duplicate") {
+TEST_CASE(
+    "a reordered packet older than the window is not called a duplicate") {
   // Beyond the window we genuinely cannot know whether we saw it before, and
   // "I don't know" must not be reported as "I know it's a duplicate" — one is
   // evidence about the network, the other is an admission of ignorance.
@@ -92,7 +93,8 @@ TEST_CASE("a reordered packet older than the window is not called a duplicate") 
   CHECK(t.observe(100'000u - kWindow + 1u) == V::Reordered);
 }
 
-TEST_CASE("the circular window does not report phantom duplicates after a lap") {
+TEST_CASE(
+    "the circular window does not report phantom duplicates after a lap") {
   // The bug this test exists for: slot(seq) is seq % 1024, so sequence 2 and
   // sequence 1026 share a slot. When the high-water mark jumps over a gap, the
   // slots it crosses must be cleared, or a later reordered arrival lands on a
@@ -156,7 +158,7 @@ TEST_CASE("loss spanning the wrap is counted, not misread as reordering") {
   // 0xFFFFFFF2 .. 0x00000001 lost (16 packets)
   t.observe(0x00000002u);
 
-  CHECK(t.expected() == 19);   // 0xFFFFFFF0 .. 0x00000002 inclusive
+  CHECK(t.expected() == 19);  // 0xFFFFFFF0 .. 0x00000002 inclusive
   CHECK(t.received() == 3);
   CHECK(t.lost() == 16);
   CHECK(t.reordered() == 0);
@@ -172,9 +174,9 @@ TEST_CASE("a packet arriving before the first one seen widens the baseline") {
 
   CHECK(t.observe(997) == V::Reordered);
   CHECK(t.base() == 997);
-  CHECK(t.expected() == 4);    // 997..1000
+  CHECK(t.expected() == 4);  // 997..1000
   CHECK(t.received() == 2);
-  CHECK(t.lost() == 2);        // 998, 999
+  CHECK(t.lost() == 2);  // 998, 999
 }
 
 TEST_CASE("reset returns the tracker to its initial state") {
@@ -202,7 +204,7 @@ TEST_CASE("loss fraction matches a hand-computed rate") {
   for (std::uint32_t s = 0; s < 100; ++s) {
     if (s % 10 != 9) t.observe(s);
   }
-  CHECK(t.expected() == 99);   // span 0..98, since 99 was dropped
+  CHECK(t.expected() == 99);  // span 0..98, since 99 was dropped
   CHECK(t.received() == 90);
   CHECK(t.lost() == 9);
   CHECK(t.loss_fraction() > 0.09);

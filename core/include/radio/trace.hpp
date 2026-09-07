@@ -47,9 +47,9 @@ inline constexpr std::size_t kStageCount = 9;
 // two halves are joined offline. Zero bytes on the wire and no protocol change.
 //
 // The cost is that joining across two devices requires the clock offset, which
-// carries +/- rtt/2 of uncertainty (lesson 09). Within one host there is one
-// clock, so the join is exact -- which is the concrete reason M1 measures the
-// full pipeline on the host before any device work.
+// carries +/- rtt/2 of uncertainty (see ClockSync). Within one host there is
+// one clock, so the join is exact -- which is the concrete reason M1 measures
+// the full pipeline on the host before any device work.
 struct TraceRecord {
   std::uint32_t stream_id = 0;
   std::uint32_t sequence = 0;
@@ -83,8 +83,8 @@ struct TraceRecord {
 //
 // Capacity is allocated once at construction. record() performs no allocation,
 // takes no lock, and does no I/O, because it is called from the packet path and
-// eventually from beside an audio callback -- where a malloc or a write() is a
-// latency spike (lesson 01 section 6).
+// eventually from beside an audio callback, where a malloc or a write() is a
+// latency spike.
 //
 // Flushing is a separate, explicitly non-real-time step. That separation is the
 // whole point: the hot path appends to memory, and something else turns it into

@@ -45,8 +45,8 @@ class Endpoint {
   // happen. Peer discovery is mDNS's job (M3), and it hands us numeric
   // addresses. Keeping this function incapable of blocking means it can never
   // become the cause of one.
-  [[nodiscard]] static std::optional<Endpoint> parse(std::string_view address,
-                                                     std::uint16_t port) noexcept;
+  [[nodiscard]] static std::optional<Endpoint> parse(
+      std::string_view address, std::uint16_t port) noexcept;
 
   // Accepts "host:port", with IPv6 in brackets: "[fe80::1]:47000".
   [[nodiscard]] static std::optional<Endpoint> parse_with_port(

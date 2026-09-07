@@ -14,9 +14,10 @@ struct Scenario {
   std::string name = "unnamed";
 
   // Applied to client -> forward traffic and forward -> client traffic
-  // respectively. Unprefixed keys in a scenario file set both; `up.` and `down.`
-  // prefixes override one direction, which is what lets a scenario reproduce the
-  // asymmetric path that clock-offset estimation cannot see through.
+  // respectively. Unprefixed keys in a scenario file set both; `up.` and
+  // `down.` prefixes override one direction, which is what lets a scenario
+  // reproduce the asymmetric path that clock-offset estimation cannot see
+  // through.
   radio::sim::Impairment upstream{};
   radio::sim::Impairment downstream{};
 

@@ -58,7 +58,9 @@ const TraceRecord& TraceBuffer::operator[](std::size_t index) const noexcept {
   // write cursor. Presenting them oldest-first keeps output in pipeline order,
   // which is what makes a trace readable.
   const std::size_t start =
-      written_ < slots_.size() ? 0 : static_cast<std::size_t>(written_ % slots_.size());
+      written_ < slots_.size()
+          ? 0
+          : static_cast<std::size_t>(written_ % slots_.size());
   return slots_[(start + index) % slots_.size()];
 }
 

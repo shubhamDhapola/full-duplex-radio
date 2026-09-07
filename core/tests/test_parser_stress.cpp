@@ -7,13 +7,13 @@
 // macOS toolchain the fuzz target simply cannot be built. A parser that is only
 // hardened on machines with Homebrew LLVM installed is not hardened.
 //
-// So this runs in ctest on every platform, every build, with a fixed seed. It is
-// weaker than libFuzzer in general, but note the shape of what it is testing:
-// proto.cpp has no loops, no recursion, and no variable-length fields. The
-// entire attack surface is a handful of length comparisons and fixed-offset
-// loads. Random plus mutation-of-valid over that shape gets close to exhaustive,
-// which is not a claim that would hold for, say, an ASN.1 or a video container
-// parser.
+// So this runs in ctest on every platform, every build, with a fixed seed. It
+// is weaker than libFuzzer in general, but note the shape of what it is
+// testing: proto.cpp has no loops, no recursion, and no variable-length fields.
+// The entire attack surface is a handful of length comparisons and fixed-offset
+// loads. Random plus mutation-of-valid over that shape gets close to
+// exhaustive, which is not a claim that would hold for, say, an ASN.1 or a
+// video container parser.
 //
 // Run it under sanitizers for it to mean anything:
 //   cmake -B build-san -DRADIO_SANITIZE=ON -DCMAKE_BUILD_TYPE=Debug
@@ -31,7 +31,7 @@ namespace {
 
 // splitmix64, so the sequence is identical on every platform and a failure is
 // reproducible from the seed alone. std::mt19937 plus a distribution would not
-// be (see learn/11 section 3).
+// be -- see the note on ImpairmentEngine's hand-rolled transforms.
 class Random {
  public:
   explicit Random(std::uint64_t seed) noexcept : state_(seed) {}
@@ -62,10 +62,11 @@ volatile std::uint64_t g_sink = 0;
 // beyond "did not crash": a successful parse must return a view that lies
 // entirely inside the input buffer.
 //
-// This is worth asserting rather than leaving to the sanitiser. An out-of-bounds
-// span is only caught by ASan when something reads it, and nothing here has to
-// read it -- so the bug could sit undetected until a caller in M1 dereferences
-// the tail. Checking the bounds directly catches it at the source.
+// This is worth asserting rather than leaving to the sanitiser. An
+// out-of-bounds span is only caught by ASan when something reads it, and
+// nothing here has to read it -- so the bug could sit undetected until a caller
+// in M1 dereferences the tail. Checking the bounds directly catches it at the
+// source.
 void exercise(ByteView datagram) {
   const auto* begin = datagram.data();
   const auto* end = begin + datagram.size();
@@ -172,9 +173,10 @@ TEST_CASE("all 65536 flag values are handled for a media packet") {
   for (unsigned flags = 0; flags < 65536; ++flags) {
     store_be16(packet.data() + 2, static_cast<std::uint16_t>(flags));
     const auto parsed = proto::parse_media(packet);
-    // Anything outside the assigned mask must be rejected, and nothing inside it
-    // may be.
-    if ((flags & ~static_cast<unsigned>(proto::media_flag::kAssignedMask)) != 0) {
+    // Anything outside the assigned mask must be rejected, and nothing inside
+    // it may be.
+    if ((flags & ~static_cast<unsigned>(proto::media_flag::kAssignedMask)) !=
+        0) {
       REQUIRE(parsed.reject == proto::Reject::ReservedFlag);
     } else {
       REQUIRE(parsed.ok());
@@ -220,7 +222,8 @@ TEST_CASE("mutations of valid packets never break a parser") {
         break;
       }
       case 3: {  // extend past the datagram cap
-        packet.resize(proto::kMaxDatagram + 1 + random.below(64), random.byte());
+        packet.resize(proto::kMaxDatagram + 1 + random.below(64),
+                      random.byte());
         break;
       }
       case 4: {  // corrupt just the header, leaving a plausible payload
@@ -229,9 +232,8 @@ TEST_CASE("mutations of valid packets never break a parser") {
         break;
       }
       case 5: {  // retarget at the control parser
-        packet[1] = static_cast<std::byte>(random.below(2) != 0
-                                               ? proto::Type::Pong
-                                               : proto::Type::Ping);
+        packet[1] = static_cast<std::byte>(
+            random.below(2) != 0 ? proto::Type::Pong : proto::Type::Ping);
         break;
       }
       default:

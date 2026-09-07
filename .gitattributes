@@ -1,0 +1,11 @@
+* text=auto eol=lf
+
+*.png binary
+*.wav binary
+*.jpg binary
+
+# Keep generated conformance vectors out of diff noise, but still reviewable.
+protocol/testvectors/vectors.json linguist-generated=true
+
+# Don't let the vendored-free repo be misreported as another language.
+*.md linguist-documentation

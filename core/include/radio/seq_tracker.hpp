@@ -7,10 +7,11 @@
 
 namespace radio {
 
-// Tracks what has been received on one media stream and classifies each arrival.
+// Tracks what has been received on one media stream and classifies each
+// arrival.
 //
-// The data structure is a sliding-window bitmap over the sequence space: one bit
-// per recent sequence number, in a circular buffer anchored at the highest
+// The data structure is a sliding-window bitmap over the sequence space: one
+// bit per recent sequence number, in a circular buffer anchored at the highest
 // sequence seen. That one structure answers all three questions this project
 // needs to keep separate:
 //
@@ -21,14 +22,14 @@ namespace radio {
 // The tempting alternative is RFC 3550's approach of counting arrivals and
 // subtracting from the expected span. That gives loss for free but cannot
 // distinguish a duplicate from a genuine arrival, so a network that duplicates
-// packets reports *negative* loss — which is exactly the kind of nonsense number
-// that makes a benchmark table untrustworthy.
+// packets reports *negative* loss — which is exactly the kind of nonsense
+// number that makes a benchmark table untrustworthy.
 //
 // A window of 1024 packets is about 20 seconds of a 50 packet/second voice
-// stream, which is two orders of magnitude beyond any jitter buffer this project
-// will run. Anything older than that is genuinely ancient rather than merely
-// late, so collapsing it into a single `TooOld` class loses nothing. The whole
-// structure is 128 bytes, so there is no reason to be stingier.
+// stream, which is two orders of magnitude beyond any jitter buffer this
+// project will run. Anything older than that is genuinely ancient rather than
+// merely late, so collapsing it into a single `TooOld` class loses nothing. The
+// whole structure is 128 bytes, so there is no reason to be stingier.
 //
 // This is the same shape as an IPsec/DTLS anti-replay window, and when
 // encryption arrives (M8) replay protection is this class with the verdict
@@ -64,11 +65,14 @@ class SeqTracker {
   // Unique arrivals. Duplicates are excluded, which is what makes lost()
   // meaningful.
   [[nodiscard]] std::uint64_t received() const noexcept { return received_; }
-  [[nodiscard]] std::uint64_t duplicates() const noexcept { return duplicates_; }
+  [[nodiscard]] std::uint64_t duplicates() const noexcept {
+    return duplicates_;
+  }
   [[nodiscard]] std::uint64_t reordered() const noexcept { return reordered_; }
   [[nodiscard]] std::uint64_t too_old() const noexcept { return too_old_; }
 
-  // Packets the sender must have sent, from the sequence span actually observed.
+  // Packets the sender must have sent, from the sequence span actually
+  // observed.
   [[nodiscard]] std::uint64_t expected() const noexcept;
 
   // Never negative by construction: every unique arrival lies within the span.

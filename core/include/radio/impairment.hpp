@@ -129,7 +129,8 @@ class ImpairmentEngine {
   ImpairmentEngine() noexcept = default;
   ImpairmentEngine(const Impairment& config, std::uint64_t seed) noexcept;
 
-  [[nodiscard]] Decision decide(std::size_t packet_bytes, Micros now_us) noexcept;
+  [[nodiscard]] Decision decide(std::size_t packet_bytes,
+                                Micros now_us) noexcept;
 
   // Returns the engine to its initial state, including rewinding the PRNG, so a
   // scenario can be replayed exactly.
@@ -164,7 +165,8 @@ class ImpairmentEngine {
   [[nodiscard]] double next_normal() noexcept;
   [[nodiscard]] Micros draw_jitter() noexcept;
   [[nodiscard]] Micros draw_delay() noexcept;
-  [[nodiscard]] bool rate_limit_allows(std::size_t bytes, Micros now_us) noexcept;
+  [[nodiscard]] bool rate_limit_allows(std::size_t bytes,
+                                       Micros now_us) noexcept;
   void advance_burst_state() noexcept;
 
   Impairment config_{};

@@ -9,7 +9,7 @@ ClockSync::Sample ClockSync::observe(Micros t1, Micros t2, Micros t3,
   // negative whenever the peer's epoch is lower than ours. Doing this in Micros
   // (unsigned) would turn a small negative into ~1.8e19 and the estimate would
   // be silently absurd -- the same failure mode as the loss counter in
-  // seq_tracker and the wall-clock step in lesson 06.
+  // seq_tracker and in any duration taken from a steppable clock.
   const auto T1 = static_cast<std::int64_t>(t1);
   const auto T2 = static_cast<std::int64_t>(t2);
   const auto T3 = static_cast<std::int64_t>(t3);
@@ -46,7 +46,8 @@ ClockSync::Sample ClockSync::observe(Micros t1, Micros t2, Micros t3,
 
   // Freeze a drift baseline once the first window is full, rather than tracking
   // the best-ever sample. If the anchor kept being replaced by later samples,
-  // the time baseline would keep shortening and the slope would never stabilise.
+  // the time baseline would keep shortening and the slope would never
+  // stabilise.
   if (!drift_anchor_.valid && accepted_ >= kWindowSize) {
     drift_anchor_ = best();
   }
