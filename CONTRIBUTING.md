@@ -12,6 +12,18 @@ Requires CMake ≥ 3.24, Ninja, and a C++20 compiler. Catch2 and nlohmann/json a
 fetched at configure time and are test-only; `radio_core` itself has no
 dependencies.
 
+## One-time setup
+
+```bash
+pip install clang-format==20.1.7      # the version CI pins
+git config core.hooksPath .githooks   # pre-commit format check
+```
+
+The hook rejects a commit whose staged C++ files are not formatted. CI checks
+the same thing, but a CI failure costs a round trip and leaves a red mark on the
+history for something a local check catches in milliseconds. Bypass it with
+`--no-verify` for a work-in-progress commit.
+
 ## Before opening a pull request
 
 ```bash

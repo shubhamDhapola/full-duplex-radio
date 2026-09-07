@@ -1,0 +1,51 @@
+#!/bin/sh
+# Reject a commit whose staged C or C++ files are not clang-formatted.
+#
+# CI checks this too, but a CI failure costs a round trip and leaves a red mark
+# on the history for something a local check catches in milliseconds. This exists
+# because that exact thing happened: a new file was added after the last format
+# pass and the formatting job failed on it.
+#
+# Install:  git config core.hooksPath .githooks
+# Bypass:   git commit --no-verify   (for a work-in-progress commit)
+
+staged=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(c|h|cpp|hpp)$' || true)
+[ -z "$staged" ] && exit 0
+
+# Look beyond PATH before giving up. A hook that silently skips is worse than no
+# hook: it reports success while checking nothing, which is how the formatting
+# failure this hook exists to prevent reached CI in the first place.
+CF=$(command -v clang-format 2>/dev/null)
+if [ -z "$CF" ]; then
+    for candidate in \
+        "$HOME"/Library/Python/*/bin/clang-format \
+        "$HOME"/.local/bin/clang-format \
+        /opt/homebrew/bin/clang-format \
+        /usr/local/bin/clang-format
+    do
+        [ -x "$candidate" ] && { CF="$candidate"; break; }
+    done
+fi
+if [ -z "$CF" ]; then
+    echo "pre-commit: clang-format not found, so formatting was NOT checked." >&2
+    echo "            install the pinned version:  pip install clang-format==20.1.7" >&2
+    echo "            CI will check it regardless." >&2
+    exit 0
+fi
+
+# Check the staged content rather than the working tree, so a partially staged
+# file is judged on what is actually being committed.
+failed=""
+for file in $staged; do
+    if ! git show ":$file" | "$CF" --assume-filename="$file" --dry-run --Werror >/dev/null 2>&1; then
+        failed="$failed $file"
+    fi
+done
+
+if [ -n "$failed" ]; then
+    echo "pre-commit: these staged files are not clang-formatted:" >&2
+    for file in $failed; do echo "  $file" >&2; done
+    echo >&2
+    echo "  fix:  clang-format -i$failed && git add$failed" >&2
+    exit 1
+fi
