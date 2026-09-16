@@ -12,6 +12,7 @@ add_library(radio_core STATIC
   src/metrics/histogram.cpp
   src/metrics/trace.cpp
   src/audio/wav.cpp
+  src/audio/reorder_queue.cpp
   src/net/endpoint.cpp
   src/net/udp_socket.cpp
   src/net/pacer.cpp
@@ -42,6 +43,7 @@ target_sources(radio_core PRIVATE
   include/radio/jitter_estimator.hpp
   include/radio/pacer.hpp
   include/radio/proto.hpp
+  include/radio/reorder_queue.hpp
   include/radio/seq_tracker.hpp
   include/radio/serial.hpp
   include/radio/spsc_ring.hpp

@@ -64,7 +64,7 @@ measurement is compared against.
       in-band FEC, expected-loss hint, DTX; fully preallocated
 - [ ] Lock-free single-producer/single-consumer PCM and packet rings, bounded,
       discarding oldest on overflow
-- [ ] Reorder queue with a playout deadline
+- [x] Reorder queue with a playout deadline
 - [ ] Jitter buffer, **pull model**: decoding happens in the consumer, so the
       playout clock is the audio clock and there is no second clock to drift
       against
