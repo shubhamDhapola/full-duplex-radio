@@ -6,12 +6,24 @@
 // -> JNI -> Kotlin. It runs the codec, the packet codec and the clock on the
 // device and reports what happened.
 //
-// It is NOT the JNI boundary the app will use for audio. That boundary carries
-// commands and state and must never be crossed from the audio callback, and it
-// arrives with the Oboe work. Keeping this file to a single self-check until
-// then means the first thing built on the device is something whose failure is
-// unambiguous: if selfCheck() reports a bad Opus round trip, the problem is the
-// toolchain or the core, not a threading model that does not exist yet.
+// It also carries the audio boundary, and the shape of that is the point:
+//
+//   commands  UI thread -> engine.  start() and stop() open and close streams,
+//             which blocks until the callback returns. Called from Kotlin, on
+//             an ordinary thread, never from audio.
+//   state     engine -> UI thread, by POLLING. The UI asks for a snapshot; the
+//             audio callback never calls back into Java.
+//
+// The direction matters more than it looks. The obvious design has the callback
+// notify the UI when something changes -- an underrun, a device disconnect --
+// and that requires a JNI call from the audio thread. A JNI call can block on a
+// class load, on the GC, or on acquiring the JNI lock, and a blocked audio
+// callback is a click. There is no safe amount of JNI on that thread, so the
+// direction is inverted: the callback only ever touches atomics, and whoever
+// wants to know reads them.
+//
+// The cost is that the UI learns about an event up to one poll interval late.
+// For a diagnostics screen that is free.
 #include <jni.h>
 
 #include <android/log.h>
@@ -23,6 +35,9 @@
 #include <string>
 #include <vector>
 
+#include <oboe/Oboe.h>
+
+#include "audio_engine.hpp"
 #include "radio/clock.hpp"
 #include "radio/opus_codec.hpp"
 #include "radio/proto.hpp"
@@ -189,4 +204,74 @@ Java_dev_fdradio_NativeCore_abi(JNIEnv* env, jobject /*thiz*/) {
   const char* abi = "unknown";
 #endif
   return env->NewStringUTF(abi);
+}
+
+// ---------------------------------------------------------------- audio
+
+extern "C" JNIEXPORT jboolean JNICALL Java_dev_fdradio_AudioEngine_nativeStart(
+    JNIEnv* /*env*/, jobject /*thiz*/, jint capture) {
+  const auto requested = static_cast<fdradio::AudioEngine::Capture>(capture);
+  return fdradio::engine().start(requested) ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_dev_fdradio_AudioEngine_nativeStop(JNIEnv* /*env*/, jobject /*thiz*/) {
+  fdradio::engine().stop();
+}
+
+// The whole diagnostic state as one long[].
+//
+// An array of primitives rather than a formatted string or a Java object,
+// because this is polled several times a second: a string would mean building
+// and parsing text on every poll, and constructing a Java object means
+// FindClass and GetMethodID, which are the calls most likely to be slow. The
+// field order is a contract with AudioEngine.kt and is asserted there by name,
+// so a field inserted in the middle is a compile-time rename rather than a
+// silently shifted column.
+extern "C" JNIEXPORT jlongArray JNICALL
+Java_dev_fdradio_AudioEngine_nativeSnapshot(JNIEnv* env, jobject /*thiz*/) {
+  const fdradio::AudioEngine::Snapshot s = fdradio::engine().snapshot();
+
+  const jlong values[] = {
+      s.running ? 1 : 0,
+      s.input_sample_rate,
+      s.input_burst_frames,
+      s.input_buffer_frames,
+      s.input_capacity_frames,
+      s.input_xruns,
+      s.input_aaudio ? 1 : 0,
+      s.input_low_latency ? 1 : 0,
+      s.output_sample_rate,
+      s.output_burst_frames,
+      s.output_buffer_frames,
+      s.output_capacity_frames,
+      s.output_xruns,
+      s.output_aaudio ? 1 : 0,
+      s.output_low_latency ? 1 : 0,
+      s.output_latency_us,
+      s.ring_samples,
+      s.ring_overflows,
+      s.ring_underruns,
+      s.input_callbacks,
+      s.output_callbacks,
+      s.worst_output_gap_us,
+      s.last_error,
+      s.capture,
+      s.primed_samples,
+  };
+  constexpr jsize kCount =
+      static_cast<jsize>(sizeof(values) / sizeof(values[0]));
+
+  jlongArray array = env->NewLongArray(kCount);
+  if (array == nullptr)
+    return nullptr;  // OOM; the exception is already pending
+  env->SetLongArrayRegion(array, 0, kCount, values);
+  return array;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_dev_fdradio_AudioEngine_nativeErrorText(JNIEnv* env, jobject /*thiz*/,
+                                             jint code) {
+  return env->NewStringUTF(
+      oboe::convertToText(static_cast<oboe::Result>(code)));
 }

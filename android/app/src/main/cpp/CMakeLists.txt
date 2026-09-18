@@ -23,13 +23,22 @@ endif()
 # brings in radio_core and nothing else.
 add_subdirectory("${RADIO_ROOT}" "${CMAKE_BINARY_DIR}/radio_core")
 
-add_library(fdradio_jni SHARED jni_bridge.cpp)
+# Oboe: the Android audio layer. Platform-specific by definition, so it is
+# fetched here rather than by the core, which stays free of anything that is not
+# POSIX.
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../../../cmake/oboe.cmake")
+
+add_library(fdradio_jni SHARED
+    jni_bridge.cpp
+    audio_engine.cpp
+)
 
 # C++20 arrives with radio_core, which declares it as a usage requirement --
 # this target is in the parent scope of the core's add_subdirectory, so the
 # root build's CMAKE_CXX_STANDARD does not reach it.
 target_link_libraries(fdradio_jni PRIVATE
     radio_core
+    oboe
     android
     log
 )

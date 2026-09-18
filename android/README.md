@@ -70,13 +70,51 @@ library to ship and keep in step.
 unoptimised build is meaningless, and that is exactly the number someone will
 read off the diagnostics screen.
 
-## What this is not
+## The audio path
 
-`NativeCore` is not the JNI boundary the audio path will use. That boundary
-carries commands and state, must never be crossed from an audio callback, and
-arrives with the Oboe work.
+Oboe 1.9.3, pinned by content hash in `cmake/oboe.cmake` and built from source
+as a static library, exactly as libopus is one layer down. The app opens one
+input and one output stream and moves PCM between them through the core's
+`SpscRing`.
 
-Keeping this to a single self-check until then means the first thing running on
-the device has an unambiguous failure mode: if `selfCheck()` reports a bad Opus
-round trip, the problem is the toolchain or the core — not a threading model
-that does not exist yet.
+**Two independent streams, not Oboe's `FullDuplexStream`.** The duplex helper
+drives input from the output callback and is right when the two must be
+sample-locked — echo cancellation, which is M7. It is the wrong shape here: in
+the finished product capture goes to the network and playback comes from the
+jitter buffer, and the two never meet. The structure is the one that ships; the
+microphone-to-speaker wiring is temporary scaffolding so both halves can be
+proved before there is a network.
+
+**The capture chain is a measured trade-off, not a preference.** On a Redmi
+Note 9 Pro, `VoiceCommunication` — the preset that asks for platform echo
+cancellation — gets 960-frame bursts and *no* low-latency mode, while
+`VoiceRecognition` and `Unprocessed` get 96-frame bursts, LowLatency and
+Exclusive. You cannot have the platform's canceller and its fast capture path at
+the same time. The app exposes all three so the comparison can be re-run per
+device; see [measurements §9](../docs/measurements.md).
+
+## The JNI boundary
+
+Two kinds of traffic, deliberately going opposite ways:
+
+- **Commands** (`start`, `stop`) go down, from an ordinary thread. They open and
+  close streams, which blocks until the audio callback returns.
+- **State** comes up by **polling**. The audio callback never calls into Java.
+
+The direction matters more than it looks. The obvious design has the callback
+notify the UI when something changes, and that means a JNI call from the audio
+thread. A JNI call can block on a class load, on the GC, or on the JNI lock, and
+a blocked audio callback is an audible click. There is no safe amount of JNI on
+that thread, so the direction is inverted: the callback touches only atomics and
+a lock-free ring, and whoever wants to know reads them.
+
+The cost is that the UI learns about an underrun up to one poll interval late.
+For a diagnostics screen that is free.
+
+### What an audio callback may not do
+
+No allocation, no locks, no syscalls, no JNI, no unbounded loops. Every one of
+those is easy to write by accident and none fail loudly — they produce an
+occasional click indistinguishable from network jitter by the time anyone hears
+it. The fixed-size ring, the atomics and the preallocated buffers exist to make
+the rule keepable rather than merely stated.

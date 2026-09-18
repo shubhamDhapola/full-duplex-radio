@@ -366,3 +366,92 @@ talkspurt boundaries where a resize costs no artefact.
   when the process was scheduled, and moved by one frame in 400 across repeated
   full-matrix runs. Treat single-frame differences in `late`, `concealed` and
   `recovered` as noise, and the network columns as exact.
+
+---
+
+## 9. The device audio path
+
+First figures from hardware: a Redmi Note 9 Pro, arm64-v8a, Android 12, with
+the app's microphone-to-speaker loopback. Oboe 1.9.3 over AAudio.
+
+These characterise the *audio device*, not the pipeline. End-to-end
+mouth-to-ear against the 82 ms host baseline of section 8 needs the transport
+on the phone, and arrives later in M2.
+
+### 9.1 The capture chain decides whether you get low latency at all
+
+Requesting `PerformanceMode::LowLatency` and `SharingMode::Exclusive` on both
+streams, and varying only the input preset:
+
+| Input preset | burst | buffer | performance mode | sharing |
+|---|---|---|---|---|
+| `VoiceCommunication` | 960 (20 ms) | 2880 | **None** | Shared |
+| `VoiceRecognition` | **96 (2 ms)** | 192 | **LowLatency** | **Exclusive** |
+| `Unprocessed` | **96 (2 ms)** | 192 | **LowLatency** | **Exclusive** |
+
+Output was identical in all three: 192-frame bursts (4 ms), LowLatency, Shared.
+
+`VoiceCommunication` asks the platform for its voice-processing chain — on most
+devices hardware echo cancellation and noise suppression. **On this device you
+cannot have that and the low-latency capture path at the same time.** The cost
+is a tenfold increase in capture burst, 20 ms against 2 ms, plus the loss of
+exclusive mode.
+
+That is a finding for M7, not for M2. The echo-cancellation milestone has to
+decide whether to adopt the platform's canceller or build one, and this is the
+price of the first option stated in milliseconds rather than in principle. The
+preset is therefore a runtime choice in `AudioEngine`, not a constant, so the
+comparison can be re-run on every device that matters.
+
+It is also a warning about the word "requested". `PerformanceMode::LowLatency`
+is a request; what came back is read with `getPerformanceMode()` and reported.
+A build that assumed the request was granted would have shipped 20 ms capture
+bursts and called them low latency.
+
+### 9.2 Stream properties on the low-latency path
+
+`VoiceRecognition` capture, 8-second run, 4075 input and 2133 output callbacks:
+
+| Quantity | Value |
+|---|---|
+| input burst / buffer | 96 / 192 frames (capacity 3072) |
+| output burst / buffer | 192 / 384 frames (capacity 1536) |
+| output latency, Oboe's estimate | 29.7 ms |
+| ring occupancy, steady state | 288 samples (6.0 ms) |
+| xruns, input / output | 0 / 0 |
+| ring overflows / underruns | 0 / 0 |
+| worst observed gap between output callbacks | 98.5 ms |
+
+The worst-gap figure is a maximum over the run, not a typical value, and it was
+observed while the device was also servicing `adb` and a screen capture. It is
+recorded because a gap that exceeds the 4 ms burst is the audio deadline being
+missed, and the xrun counter did not report it — two instruments disagreeing is
+worth knowing before either is trusted on its own.
+
+### 9.3 A start-up ordering cost that no counter called a fault
+
+Capture starts before playback, so that the first output callback has something
+to play instead of opening with underruns that are really just ordering.
+
+Opening the output stream took 141 ms on this device, and every sample captured
+during that window sat in the ring for the rest of the session:
+
+| | ring occupancy |
+|---|---|
+| capture started first, no correction | 5760 samples — **120 ms** |
+| after priming | 288 samples — **6 ms** |
+
+120 ms of standing latency, on a pipeline whose entire host budget is 82 ms,
+and nothing was wrong: no xrun, no overflow, no underrun. Every health counter
+read zero while the app was twice as slow as its own design target.
+
+The fix is to discard the backlog on the first output callback, keeping one
+cushion burst. It happens in the callback rather than in `start()` because
+`discard()` advances the read index, and the read index belongs to the
+consumer — doing it from the starting thread would make the ring a two-reader
+structure and forfeit the lock-free argument entirely.
+
+**The general lesson is the one worth keeping: latency does not have to come
+from a fault.** A buffer that is merely *fuller than it needs to be* costs
+exactly as much as one that is too small costs in glitches, and only one of
+those has a counter watching it.

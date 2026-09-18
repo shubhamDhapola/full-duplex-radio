@@ -88,8 +88,8 @@ tracing on one end of every call.
 
 - [x] Gradle project, Kotlin, Jetpack Compose, `minSdk 26`
 - [x] CMake integration linking the core for arm64-v8a and x86_64
-- [ ] Oboe capture and playback in low-latency mode
-- [ ] JNI boundary carrying commands and state, never on the audio callback
+- [x] Oboe capture and playback in low-latency mode
+- [x] JNI boundary carrying commands and state, never on the audio callback
 - [ ] Push-to-talk UI, peer list, connection state
 - [ ] Diagnostics screen: RTT, jitter, loss, late, buffer depth, codec timings
 - [ ] Conformance vectors executed on device
