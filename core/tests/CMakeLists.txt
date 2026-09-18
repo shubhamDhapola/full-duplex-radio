@@ -60,7 +60,7 @@ target_compile_definitions(radio_tests
 )
 
 if(RADIO_WITH_OPUS)
-  target_sources(radio_tests PRIVATE test_opus_codec.cpp)
+  target_sources(radio_tests PRIVATE test_opus_codec.cpp test_jitter_buffer.cpp)
 endif()
 
 catch_discover_tests(radio_tests)

@@ -20,9 +20,14 @@ add_library(radio_core STATIC
 )
 
 if(RADIO_WITH_OPUS)
+  # The jitter buffer owns a Decoder, so it belongs on the Opus side of the
+  # fence with it. The reorder queue underneath deliberately does not, which is
+  # what lets its correctness be tested on a toolchain with no Opus at all.
   target_sources(radio_core PRIVATE
     src/audio/opus_codec.cpp
+    src/audio/jitter_buffer.cpp
     include/radio/opus_codec.hpp
+    include/radio/jitter_buffer.hpp
   )
   target_link_libraries(radio_core PUBLIC opus)
 endif()

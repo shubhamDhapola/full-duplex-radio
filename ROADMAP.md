@@ -65,11 +65,11 @@ measurement is compared against.
 - [ ] Lock-free single-producer/single-consumer PCM and packet rings, bounded,
       discarding oldest on overflow
 - [x] Reorder queue with a playout deadline
-- [ ] Jitter buffer, **pull model**: decoding happens in the consumer, so the
+- [x] Jitter buffer, **pull model**: decoding happens in the consumer, so the
       playout clock is the audio clock and there is no second clock to drift
       against
-- [ ] Packet-loss concealment and FEC-assisted recovery
-- [ ] Late-packet accounting, separate from loss
+- [x] Packet-loss concealment and FEC-assisted recovery
+- [x] Late-packet accounting, separate from loss
 - [ ] `radiobench wavloop` with per-frame stage tracing
 - [ ] Unattended benchmark matrix over the impairment scenarios
 - [ ] Per-stage latency budget with measured figures
