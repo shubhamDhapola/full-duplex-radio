@@ -226,3 +226,143 @@ drawn from three different families:
 
 A test suite that has never failed is a suite of unknown value, so this check is
 worth repeating whenever a new layer lands.
+
+---
+
+## 8. The media pipeline, end to end
+
+Produced by `benchmarks/run_matrix.py`, which runs `radiobench wavloop` across
+every scenario in `benchmarks/scenarios/` with FEC off and on. 8 s fixture,
+seed 42, 60 ms jitter buffer target, 32 kbps, `--expected-loss 20` on the FEC
+runs. The whole sweep takes about 100 seconds and exits non-zero if any cell
+was not a valid measurement.
+
+```bash
+benchmarks/run_matrix.py --seed 42 --seconds 8
+```
+
+Both ends of this pipeline run in one process and read one clock, so
+capture-to-playout is a subtraction with no clock-offset estimator in it. That
+is the entire reason M1 measures on the host before M2 touches a phone: this
+figure has no error bar, and every on-device figure will be compared against it.
+
+### 8.1 Per-stage latency budget
+
+From the `excellent` scenario, FEC off. Milliseconds.
+
+| Stage | p50 | p95 | p99 | max |
+|---|---|---|---|---|
+| capture → encode | 0.32 | 0.51 | 0.67 | 2.02 |
+| queue → sent | 0.04 | 0.11 | 0.14 | 0.21 |
+| sent → received (loopback) | 0.08 | 0.16 | 0.31 | 2.42 |
+| network hold (modelled) | 0.00 | 3.07 | 4.22 | 5.18 |
+| jitter buffer | 79.87 | 81.92 | 81.92 | 85.47 |
+| decode | 0.06 | 0.12 | 0.15 | 0.61 |
+| **end to end** | **81.92** | **81.92** | **81.92** | **88.07** |
+
+**The codec is 0.4% of the latency.** Encode is 320 µs and decode 60 µs against
+a 20 ms frame. Every millisecond that matters is buffer depth, which is a
+deliberate choice, not a cost imposed by the codec.
+
+**A 60 ms target produced 82 ms, and that is correct.** Playout happens only
+when the consumer asks, every 20 ms. A frame's deadline lands wherever the
+anchor put it and then waits for the next tick, so the effective delay is the
+target rounded up to a whole frame. *The jitter buffer target is a lower bound.*
+Quote the 82.
+
+Percentiles come from the log-linear histogram of section 3, so they are bucket
+upper bounds with 3.1% worst-case relative error and never understate. Read
+81.92 as "about 80 ms".
+
+### 8.2 Loss recovery across the matrix
+
+400 frames per cell. `dropped` is what the model discarded; `late` is what
+arrived after its playout moment.
+
+| Scenario | FEC | dropped | late | from packet | FEC recovered | concealed | e2e p50 |
+|---|---|---|---|---|---|---|---|
+| excellent | off | 0 | 0 | 400 | 0 | 0 | 81.9 |
+| excellent | on | 0 | 0 | 400 | 0 | 0 | 81.9 |
+| normal | off | 0 | 0 | 400 | 0 | 0 | 81.9 |
+| normal | on | 0 | 0 | 400 | 0 | 0 | 81.9 |
+| asymmetric | off | 0 | 0 | 400 | 0 | 0 | 120.8 |
+| asymmetric | on | 0 | 0 | 400 | 0 | 0 | 120.8 |
+| congested | off | 0 | 28 | 368 | 0 | 32 | 163.8 |
+| congested | on | 0 | 28 | 368 | **29** | 3 | 163.8 |
+| poor | off | 12 | 34 | 349 | 0 | 52 | 241.7 |
+| poor | on | 12 | 34 | 349 | **36** | 17 | 241.5 |
+| extreme | off | 25 | 40 | 329 | 0 | 73 | 401.4 |
+| extreme | on | 25 | 40 | 329 | **48** | 28 | 401.4 |
+
+`asymmetric` reduces to its upstream direction here: media travels one way, so
+the return path it exists to characterise has nothing to act on.
+
+### 8.3 The A/B comparison, and its control
+
+The acceptance criterion is not "FEC sounds better". It is that two runs over an
+*identical* impairment pattern differ, and that the FEC counter accounts for the
+difference. The harness verifies the patterns really were identical — same
+`considered`, `forwarded`, `dropped`, `duplicated`, `reordered` — and refuses to
+report a pair where they were not.
+
+| Scenario | concealed off → on | recovered | samples differing | mean abs error |
+|---|---|---|---|---|
+| excellent | 0 → 0 | 0 | 97.4% | 1260 |
+| normal | 0 → 0 | 0 | 97.1% | 1257 |
+| asymmetric | 0 → 0 | 0 | 96.4% | 1248 |
+| congested | 32 → 3 | 29 | 96.2% | 3812 |
+| poor | 52 → 17 | 36 | 95.7% | 3571 |
+| extreme | 73 → 28 | 48 | 94.5% | 3896 |
+
+**The first three rows are the control, and they are the most useful rows in the
+table.** Nothing was lost, nothing was recovered, and the outputs still differ
+by ~1255 mean absolute sample error against a signal of amplitude 12000.
+
+That is the *cost* of FEC. Enabling it makes Opus spend part of a fixed 32 kbps
+on redundancy, so the primary encoding is worse whether or not the redundancy is
+ever needed. Without this control, the 3571 on `poor` reads as "FEC improved the
+audio by 3571" when roughly a third of it is FEC having degraded it. Subtract
+the control before crediting the benefit.
+
+**FEC recovers lateness, not just loss.** `congested` lost nothing on the wire
+and still had 29 frames rebuilt from redundancy: 28 packets arrived after their
+playout moment. A late packet and a lost one are the same hole to the jitter
+buffer, so the same mechanism repairs both — which is also why `late` and
+`dropped` have to be counted separately to interpret any of this.
+
+**Why 36 of 48 and not all of them.** `poor` drops 5% in bursts of mean length
+5. Opus carries frame N−1's redundancy inside packet N, so a burst destroys the
+copy along with the original and only the first frame of each run is
+recoverable. This is the measured version of the argument in section 3 for
+modelling burst loss rather than independent loss: benchmarked against
+independent 5% loss, FEC would have looked close to perfect.
+
+### 8.4 A fixed buffer inherits its first packet's bad luck
+
+`poor` and `extreme` use Pareto jitter, and they report 242 ms and 401 ms
+end-to-end against a 60 ms target. The jitter buffer is not misbehaving.
+
+The playout anchor is placed when the first packet of a talkspurt arrives. If
+that packet draws a heavy-tailed delay — 180 ms on `poor`, 340 ms on `extreme` —
+the anchor is placed that late and **every subsequent frame of the talkspurt
+inherits it**. Nothing in M1 recovers from it.
+
+Note what it does to the other counters: a late anchor makes the buffer
+*effectively deeper*, so `late` falls. A latency regression that improves a
+quality counter is only visible if the two are read together, which is the
+argument for reporting them side by side rather than reducing them to a score.
+
+This is the concrete case for M4's adaptive jitter target, re-anchoring at
+talkspurt boundaries where a resize costs no artefact.
+
+### 8.5 What is not measured here
+
+- **One direction only.** wavloop sends one way. Duplex mixing is M5.
+- **One talkspurt.** The fixture is continuous speech, so re-anchoring and DTX
+  resumption are exercised by unit tests rather than by this matrix.
+- **Host scheduling, not device audio.** The playout clock here is the pacer,
+  not a hardware callback. Section 5's ~2 ms of instrument noise applies.
+- **`late` is not seeded.** Network counters replay exactly; `late` depends on
+  when the process was scheduled, and moved by one frame in 400 across repeated
+  full-matrix runs. Treat single-frame differences in `late`, `concealed` and
+  `recovered` as noise, and the network columns as exact.

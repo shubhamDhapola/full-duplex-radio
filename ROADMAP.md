@@ -71,8 +71,8 @@ measurement is compared against.
 - [x] Packet-loss concealment and FEC-assisted recovery
 - [x] Late-packet accounting, separate from loss
 - [x] `radiobench wavloop` with per-frame stage tracing
-- [ ] Unattended benchmark matrix over the impairment scenarios
-- [ ] Per-stage latency budget with measured figures
+- [x] Unattended benchmark matrix over the impairment scenarios
+- [x] Per-stage latency budget with measured figures
 
 Acceptance: the matrix runs unattended; at 5% burst loss, FEC-on and FEC-off
 output generated from an *identical* impairment pattern differ audibly, and the

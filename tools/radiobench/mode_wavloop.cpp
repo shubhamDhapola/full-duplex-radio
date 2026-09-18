@@ -279,13 +279,28 @@ void report_human(const Options& options, const Counts& counts,
   std::printf("\n");
 }
 
+// One stage's histogram as a JSON object. Every stage is emitted the same way
+// so the benchmark matrix can build the latency budget by iterating rather than
+// by knowing which stages exist -- adding a stage should not mean editing the
+// aggregator.
+void print_stage_json(const char* name, const Histogram& histogram, bool last) {
+  const auto snapshot = histogram.snapshot();
+  std::printf(
+      R"("%s":{"count":%llu,"p50":%llu,"p95":%llu,"p99":%llu,"max":%llu,)"
+      R"("mean":%.1f}%s)",
+      name, static_cast<unsigned long long>(snapshot.count),
+      static_cast<unsigned long long>(snapshot.p50),
+      static_cast<unsigned long long>(snapshot.p95),
+      static_cast<unsigned long long>(snapshot.p99),
+      static_cast<unsigned long long>(snapshot.max), snapshot.mean,
+      last ? "" : ",");
+}
+
 void report_json(const Options& options, const Counts& counts,
                  const sim::ImpairmentEngine& net,
                  const audio::JitterBuffer& jitter, const Pacer& pacer,
                  const Stages& stages, std::uint64_t seed) {
   const auto& queue = jitter.queue();
-  const auto total = stages.total.snapshot();
-  const auto buffer = stages.buffer.snapshot();
 
   std::printf(
       R"({"mode":"wavloop","scenario":"%s","seed":%llu,"fec":%s,)"
@@ -297,12 +312,7 @@ void report_json(const Options& options, const Counts& counts,
       R"("playout":{"from_packet":%llu,"fec_recovered":%llu,"concealed":%llu,)"
       R"("silence":%llu,"muted":%llu},)"
       R"("arrivals":{"late":%llu,"duplicates":%llu,"too_old":%llu,)"
-      R"("gaps":%llu,"discarded":%llu,"resyncs":%llu},)"
-      R"("latency_us":{"count":%llu,"p50":%llu,"p95":%llu,"p99":%llu,)"
-      R"("max":%llu,"mean":%.1f},)"
-      R"("buffer_us":{"p50":%llu,"p95":%llu},)"
-      R"("pacer_resyncs":%llu,"held_overflow":%llu})"
-      "\n",
+      R"("gaps":%llu,"discarded":%llu,"resyncs":%llu},)",
       options.scenario_name.c_str(), static_cast<unsigned long long>(seed),
       options.fec ? "true" : "false", options.expected_loss_percent,
       options.bitrate_bps, options.target_delay_ms,
@@ -325,16 +335,24 @@ void report_json(const Options& options, const Counts& counts,
       static_cast<unsigned long long>(queue.too_old()),
       static_cast<unsigned long long>(queue.gaps()),
       static_cast<unsigned long long>(queue.discarded()),
-      static_cast<unsigned long long>(queue.resyncs()),
-      static_cast<unsigned long long>(total.count),
-      static_cast<unsigned long long>(total.p50),
-      static_cast<unsigned long long>(total.p95),
-      static_cast<unsigned long long>(total.p99),
-      static_cast<unsigned long long>(total.max), total.mean,
-      static_cast<unsigned long long>(buffer.p50),
-      static_cast<unsigned long long>(buffer.p95),
-      static_cast<unsigned long long>(pacer.resyncs()),
-      static_cast<unsigned long long>(counts.held_overflow));
+      static_cast<unsigned long long>(queue.resyncs()));
+
+  std::printf(R"("stages_us":{)");
+  print_stage_json("encode", stages.encode, false);
+  print_stage_json("send", stages.send, false);
+  print_stage_json("wire", stages.wire, false);
+  print_stage_json("network", stages.network, false);
+  print_stage_json("buffer", stages.buffer, false);
+  print_stage_json("decode", stages.decode, false);
+  print_stage_json("total", stages.total, true);
+  std::printf("},");
+
+  // The two health flags the matrix refuses a run on. They are last so that a
+  // truncated line still fails to parse rather than parsing as a clean run.
+  std::printf(R"("pacer_resyncs":%llu,"held_overflow":%llu})"
+              "\n",
+              static_cast<unsigned long long>(pacer.resyncs()),
+              static_cast<unsigned long long>(counts.held_overflow));
 }
 
 }  // namespace
