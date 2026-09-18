@@ -111,8 +111,9 @@ bool AudioEngine::open_stream(
   return true;
 }
 
-bool AudioEngine::start(Capture capture) noexcept {
+bool AudioEngine::start(Capture capture, Pipeline* pipeline) noexcept {
   if (running_.load()) return true;
+  pipeline_ = pipeline;
 
   ring_.reset();
   underruns_.store(0);
@@ -176,6 +177,10 @@ void AudioEngine::stop() noexcept {
     (void)input_->close();
     input_.reset();
   }
+
+  // After close(), which waits for the callbacks to return: clearing it any
+  // earlier would pull the pipeline out from under a callback still running.
+  pipeline_ = nullptr;
 }
 
 oboe::DataCallbackResult AudioEngine::onAudioReady(oboe::AudioStream* stream,
@@ -189,6 +194,10 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(oboe::AudioStream* stream,
     input_callbacks_.fetch_add(1, std::memory_order_relaxed);
 
     const auto* pcm = static_cast<const std::int16_t*>(audio_data);
+    if (pipeline_ != nullptr) {
+      pipeline_->on_capture(pcm, frames);
+      return oboe::DataCallbackResult::Continue;
+    }
     // A short write means the ring is full: the consumer is further behind than
     // the buffer is deep. Counted by the ring itself; nothing to do here but
     // carry on, because blocking is the one thing forbidden.
@@ -214,6 +223,11 @@ oboe::DataCallbackResult AudioEngine::onAudioReady(oboe::AudioStream* stream,
                                  std::memory_order_relaxed);
 
   auto* pcm = static_cast<std::int16_t*>(audio_data);
+
+  if (pipeline_ != nullptr) {
+    pipeline_->on_playout(pcm, frames);
+    return oboe::DataCallbackResult::Continue;
+  }
 
   // First call: drop everything capture accumulated while this stream was
   // still opening, keeping one cushion burst. Done here rather than in start()

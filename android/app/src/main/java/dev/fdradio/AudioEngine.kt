@@ -35,13 +35,19 @@ object AudioEngine {
         UNPROCESSED(2, "Unprocessed"),
     }
 
-    private external fun nativeStart(capture: Int): Boolean
+    private external fun nativeStart(capture: Int, withSession: Boolean): Boolean
     private external fun nativeStop()
     private external fun nativeSnapshot(): LongArray?
     private external fun nativeErrorText(code: Int): String
 
-    fun start(capture: Capture): Boolean =
-        if (NativeCore.available) nativeStart(capture.code) else false
+    /**
+     * @param withSession false wires the microphone straight to the speaker;
+     *   true hands the callbacks to [Session]. The loopback is kept because it
+     *   is the shortest test that distinguishes a broken device from a broken
+     *   pipeline.
+     */
+    fun start(capture: Capture, withSession: Boolean = false): Boolean =
+        if (NativeCore.available) nativeStart(capture.code, withSession) else false
 
     fun stop() {
         if (NativeCore.available) nativeStop()

@@ -41,6 +41,7 @@
 #include "radio/clock.hpp"
 #include "radio/opus_codec.hpp"
 #include "radio/proto.hpp"
+#include "session.hpp"
 
 namespace {
 
@@ -126,7 +127,16 @@ bool check_codec(std::string& out) {
   }
 
   std::vector<std::byte> packet(radio::proto::kMaxPayload);
+
+  // Encode is timed here as well as in the session, and the pair is the point.
+  // This one runs at start-up on an otherwise idle thread; the session's runs
+  // on an ordinary-priority worker while two audio callbacks and the UI are
+  // live. now_us() measures wall time, not CPU time, so the difference between
+  // the two is contention rather than codec cost -- and quoting either one
+  // alone would be misleading.
+  const std::uint64_t encode_started = radio::now_ns();
   const auto encoded = encoder.encode(pcm, packet);
+  const std::uint64_t encode_ns = radio::now_ns() - encode_started;
   if (!encoded.ok() || encoded.bytes == 0) {
     line(out, false, "opus encode", radio::audio::error_string(encoded.error));
     return false;
@@ -144,8 +154,8 @@ bool check_codec(std::string& out) {
   }
 
   line(out, true, "opus round trip",
-       number(encoded.bytes) + " bytes, decode " + number(elapsed_ns / 1000) +
-           " us");
+       number(encoded.bytes) + " bytes, encode " + number(encode_ns / 1000) +
+           " us, decode " + number(elapsed_ns / 1000) + " us");
   return true;
 }
 
@@ -209,9 +219,13 @@ Java_dev_fdradio_NativeCore_abi(JNIEnv* env, jobject /*thiz*/) {
 // ---------------------------------------------------------------- audio
 
 extern "C" JNIEXPORT jboolean JNICALL Java_dev_fdradio_AudioEngine_nativeStart(
-    JNIEnv* /*env*/, jobject /*thiz*/, jint capture) {
+    JNIEnv* /*env*/, jobject /*thiz*/, jint capture, jboolean with_session) {
   const auto requested = static_cast<fdradio::AudioEngine::Capture>(capture);
-  return fdradio::engine().start(requested) ? JNI_TRUE : JNI_FALSE;
+  // A null pipeline means the microphone-to-speaker loopback; otherwise the
+  // streams drive the network session.
+  fdradio::Pipeline* pipeline =
+      with_session == JNI_TRUE ? &fdradio::session() : nullptr;
+  return fdradio::engine().start(requested, pipeline) ? JNI_TRUE : JNI_FALSE;
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -274,4 +288,84 @@ Java_dev_fdradio_AudioEngine_nativeErrorText(JNIEnv* env, jobject /*thiz*/,
                                              jint code) {
   return env->NewStringUTF(
       oboe::convertToText(static_cast<oboe::Result>(code)));
+}
+
+// ---------------------------------------------------------------- session
+
+extern "C" JNIEXPORT jboolean JNICALL Java_dev_fdradio_Session_nativeStart(
+    JNIEnv* env, jobject /*thiz*/, jstring peer_host, jint peer_port,
+    jint local_port, jint bitrate, jboolean fec, jint expected_loss,
+    jint target_delay_ms) {
+  const char* host = env->GetStringUTFChars(peer_host, nullptr);
+  if (host == nullptr) return JNI_FALSE;
+
+  const auto peer =
+      radio::net::Endpoint::parse(host, static_cast<std::uint16_t>(peer_port));
+  env->ReleaseStringUTFChars(peer_host, host);
+
+  // Numeric addresses only, by design: Endpoint::parse refuses hostnames
+  // because getaddrinfo blocks, and nothing reachable from the media path may
+  // block. Discovery is M3's job and hands over numeric addresses.
+  if (!peer) return JNI_FALSE;
+
+  fdradio::Session::Config config;
+  config.peer = *peer;
+  config.local_port = static_cast<std::uint16_t>(local_port);
+  config.bitrate_bps = bitrate;
+  config.fec = fec == JNI_TRUE;
+  config.expected_loss_percent = expected_loss;
+  config.target_delay_ms = static_cast<std::uint32_t>(target_delay_ms);
+
+  return fdradio::session().start(config) ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_dev_fdradio_Session_nativeStop(JNIEnv* /*env*/, jobject /*thiz*/) {
+  fdradio::session().stop();
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_dev_fdradio_Session_nativeSetTransmitting(JNIEnv* /*env*/,
+                                               jobject /*thiz*/, jboolean on) {
+  fdradio::session().set_transmitting(on == JNI_TRUE);
+}
+
+extern "C" JNIEXPORT jlongArray JNICALL
+Java_dev_fdradio_Session_nativeSnapshot(JNIEnv* env, jobject /*thiz*/) {
+  const fdradio::Session::Snapshot s = fdradio::session().snapshot();
+
+  const jlong values[] = {
+      s.running ? 1 : 0,
+      s.transmitting ? 1 : 0,
+      s.packets_sent,
+      s.bytes_sent,
+      s.send_failed,
+      s.encode_failed,
+      s.talkspurts,
+      s.datagrams_received,
+      s.rejected,
+      s.rx_ring_overflows,
+      s.from_packet,
+      s.fec_recovered,
+      s.concealed,
+      s.silence,
+      s.late,
+      s.gaps,
+      s.duplicates,
+      s.depth_frames,
+      s.encode_calls,
+      s.encode_total_us,
+      s.encode_max_us,
+      s.decode_calls,
+      s.decode_total_us,
+      s.decode_max_us,
+      s.tx_pcm_overflows,
+  };
+  constexpr jsize kCount =
+      static_cast<jsize>(sizeof(values) / sizeof(values[0]));
+
+  jlongArray array = env->NewLongArray(kCount);
+  if (array == nullptr) return nullptr;
+  env->SetLongArrayRegion(array, 0, kCount, values);
+  return array;
 }

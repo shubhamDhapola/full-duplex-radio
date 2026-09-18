@@ -1,11 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- RECORD_AUDIO is here because the Oboe capture path uses it. INTERNET
-         is still absent: nothing sends a packet yet, and declaring a permission
-         before anything uses it makes the install prompt lie about what the app
-         does. -->
+    <!-- Both are now used: RECORD_AUDIO by the Oboe capture path, INTERNET by
+         the UDP transport. LAN-only, so no other network permission applies. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- Low-latency audio is a request, not a guarantee. Declaring these lets
          the platform and the Play listing know the app cares, and on devices

@@ -455,3 +455,57 @@ structure and forfeit the lock-free argument entirely.
 from a fault.** A buffer that is merely *fuller than it needs to be* costs
 exactly as much as one that is too small costs in glitches, and only one of
 those has a counter watching it.
+
+### 9.4 The pipeline on the device
+
+The whole media path running on the phone, with the peer set to `127.0.0.1` so
+the datagrams go out of the socket and come back in. That exercises the socket,
+the packet codec, Opus, the reorder queue and the jitter buffer with real audio
+at both ends; only the LAN hop is absent.
+
+Five seconds of push-to-talk, `VoiceRecognition` capture, 60 ms jitter target,
+FEC off:
+
+| Quantity | Value |
+|---|---|
+| sent | 248 packets, 20 KiB, 1 talkspurt |
+| received | 248, 0 rejected |
+| played from packet | 244 (4 still in the buffer) |
+| late / concealed / FEC-recovered | 0 / 0 / 0 |
+| buffer depth | 4 frames — **80 ms** |
+
+The buffer depth is the same 80 ms the host measured in section 8.1 from a 60 ms
+target, for the same reason: playout is frame-granular and a deadline landing
+mid-tick waits for the next one. The two implementations agreeing on a figure
+neither was tuned to produce is the strongest evidence so far that the phone is
+running the same pipeline the benchmarks describe.
+
+After the talkspurt closed, 303 received and 303 played with **0 concealed** —
+TALKSPURT_END draining to silence rather than concealment, on the device.
+
+### 9.5 A codec cost that was mostly not the codec
+
+The session reported Opus encode at **5342 µs mean, 12508 µs max**, against
+280 µs on the host. Six times slower hardware does not explain twenty times
+slower encoding.
+
+Timing the same encode at start-up, on an otherwise idle thread, settles it:
+
+| Measurement | Encode |
+|---|---|
+| start-up self-check, idle thread | **750 µs** |
+| inside a running session | **5342 µs mean** |
+
+`now_us()` is wall time, not CPU time. The 750 µs is what the encoder costs on
+this device — 3.75% of a 20 ms frame. The other 4.6 ms was the network thread
+being descheduled mid-encode while two audio callbacks and the UI competed for
+the same cores.
+
+Both numbers are true and only one of them is about Opus. Quoting the in-session
+figure as "the codec is slow on ARM" would have sent the next person optimising
+the wrong thing entirely — the same trap as the 22 ms loopback in section 8, in
+a different disguise.
+
+The fix is scheduling, not a faster encoder: the network thread now asks for
+audio-adjacent priority via `setpriority`. **That change is built but not yet
+re-measured on the device**, so no post-fix figure is quoted here.

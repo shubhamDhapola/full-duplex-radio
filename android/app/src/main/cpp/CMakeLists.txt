@@ -31,6 +31,7 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/../../../../cmake/oboe.cmake")
 add_library(fdradio_jni SHARED
     jni_bridge.cpp
     audio_engine.cpp
+    session.cpp
 )
 
 # C++20 arrives with radio_core, which declares it as a usage requirement --

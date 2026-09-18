@@ -11,6 +11,23 @@
 
 namespace fdradio {
 
+// What the audio callbacks hand their work to.
+//
+// A virtual call on the audio callback is fine -- it allocates nothing and
+// blocks on nothing -- and it is what lets the Oboe layer stay ignorant of
+// whether it is driving a loopback or a network session. Everything an
+// implementation does inside these two methods is bound by the callback
+// contract described on AudioEngine below.
+class Pipeline {
+ public:
+  virtual void on_capture(const std::int16_t* pcm,
+                          std::int32_t frames) noexcept = 0;
+  virtual void on_playout(std::int16_t* pcm, std::int32_t frames) noexcept = 0;
+
+ protected:
+  ~Pipeline() = default;
+};
+
 // Opens one input stream and one output stream in low-latency mode and moves
 // PCM between them through a lock-free ring.
 //
@@ -36,10 +53,11 @@ namespace fdradio {
 // hardware consumes a buffer whether or not we filled it, and a late return is
 // an audible click. So inside onAudioReady there is:
 //
-//   no allocation          new, std::string, std::vector, std::function
-//   no locks               a mutex held by any other thread is an unbounded
-//   wait no syscalls            file I/O, logging, sleeping no JNI a JNI call
-//   can block on a class load or on the GC no unbounded loops
+//   - no allocation: new, std::string, std::vector, std::function
+//   - no locks: a mutex held by any other thread is an unbounded wait
+//   - no syscalls: file I/O, logging, sleeping
+//   - no JNI: a JNI call can block on a class load or on the GC
+//   - no unbounded loops
 //
 // Every one of those is easy to write by accident and none of them fail
 // loudly -- they produce an occasional click that is indistinguishable from
@@ -129,7 +147,12 @@ class AudioEngine : public oboe::AudioStreamDataCallback,
 
   // Opens and starts both streams. Safe to call when already running, in which
   // case it does nothing. Not callable from the audio callback.
-  [[nodiscard]] bool start(Capture capture) noexcept;
+  // `pipeline` may be null, in which case capture is wired straight to
+  // playback through the ring -- the loopback that proved the audio path
+  // before there was anything else to do with the samples. It is kept because
+  // it is the shortest test that distinguishes "the device is broken" from
+  // "our pipeline is broken".
+  [[nodiscard]] bool start(Capture capture, Pipeline* pipeline) noexcept;
   void stop() noexcept;
   [[nodiscard]] bool running() const noexcept { return running_.load(); }
 
@@ -172,6 +195,10 @@ class AudioEngine : public oboe::AudioStreamDataCallback,
   // Not atomic for that reason: making it atomic would suggest another thread
   // reads it, and nothing else may.
   bool primed_ = false;
+
+  // Set before the streams start and cleared after they stop, so the callbacks
+  // never see it change under them.
+  Pipeline* pipeline_ = nullptr;
 };
 
 // One engine per process. The audio device is a single resource and two engines
