@@ -97,6 +97,8 @@ void JitterBuffer::close() noexcept {
   anchor_local_us_ = 0;
   playout_ts_ = 0;
   conceal_run_ = 0;
+  has_end_ = false;
+  end_sequence_ = 0;
 
   from_packet_ = 0;
   fec_recovered_ = 0;
@@ -115,6 +117,7 @@ void JitterBuffer::reset_stream() noexcept {
   anchored_ = false;
   has_stream_ = false;
   conceal_run_ = 0;
+  has_end_ = false;
   // The decoder's history belongs to the stream that just ended. Extrapolating
   // the next talkspurt from the tail of the previous speaker's voice is worse
   // than starting cold, and costs nothing to avoid.
@@ -185,6 +188,9 @@ JitterBuffer::Push JitterBuffer::push(const proto::MediaPacket& packet,
     queue_.start(header.sequence);
     playout_ts_ = header.timestamp;
   } else if (header.talkspurt_start()) {
+    // A new talkspurt, so whatever the previous one said about its own end no
+    // longer applies.
+    has_end_ = false;
     if (serial::precedes_or_equal(queue_.cursor(), header.sequence)) {
       // The normal case: the flag arrives one buffer-depth ahead of its own
       // playout, so the mapping changes while the cursor is still walking
@@ -202,6 +208,15 @@ JitterBuffer::Push JitterBuffer::push(const proto::MediaPacket& packet,
     }
   }
 
+  // Recorded before the insert, so an end flag still registers on a packet the
+  // queue goes on to refuse as a duplicate or as late. The flag is about the
+  // stream, not about this particular copy of the packet.
+  if (header.talkspurt_end() &&
+      (!has_end_ || serial::precedes(end_sequence_, header.sequence))) {
+    has_end_ = true;
+    end_sequence_ = header.sequence;
+  }
+
   ReorderQueue::FrameInfo info;
   info.header = header;
   info.arrival_us = arrival_us;
@@ -217,6 +232,7 @@ JitterBuffer::Push JitterBuffer::push(const proto::MediaPacket& packet,
     anchor(header.timestamp, arrival_us);
     playout_ts_ = header.timestamp;
     conceal_run_ = 0;
+    has_end_ = false;
     (void)decoder_.reset_state();
     info.deadline_us = deadline_of(header.timestamp);
     result = queue_.insert(info, packet.payload, arrival_us);
@@ -344,7 +360,17 @@ JitterBuffer::Pulled JitterBuffer::pull(std::span<std::int16_t> pcm,
   // of the original frame each one preserves.
   bool filled = false;
 
-  if (config_.fec) {
+  // Unless the sender already said it had stopped, in which case there is no
+  // hole to fill -- this is the end of speech, and concealing it would invent
+  // audio nobody sent and report it as loss.
+  if (has_end_ && !serial::precedes_or_equal(queue_.cursor(), end_sequence_)) {
+    write_silence(pcm);
+    ++silence_;
+    out.source = Source::Silence;
+    filled = true;
+  }
+
+  if (!filled && config_.fec) {
     ReorderQueue::Frame next;
     // The redundancy for frame N travels inside packet N+1, so recovering the
     // frame we want means reading a frame we are not ready to play. The

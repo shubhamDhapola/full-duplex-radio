@@ -224,8 +224,8 @@ class JitterBuffer {
   [[nodiscard]] std::uint64_t concealed() const noexcept { return concealed_; }
 
   // Frames where the buffer had nothing to play and chose not to invent
-  // anything: before the first packet, inside a DTX gap, or past
-  // max_conceal_run.
+  // anything: before the first packet, inside a DTX gap, past a
+  // TALKSPURT_END, or past max_conceal_run.
   [[nodiscard]] std::uint64_t silence() const noexcept { return silence_; }
 
   // Concealment runs that hit max_conceal_run and were cut off. Non-zero means
@@ -237,6 +237,21 @@ class JitterBuffer {
   [[nodiscard]] std::uint64_t catchup_frames() const noexcept {
     return catchup_frames_;
   }
+  // True once a TALKSPURT_END has been seen for the current stream. The
+  // sender said it had finished, so a hole past that sequence is the end of
+  // speech rather than a loss, and is filled with silence instead of
+  // concealment (spec 3.1).
+  //
+  // Worth stating why this is not cosmetic: without it, every benchmark run
+  // ends with a handful of concealed frames while the buffer drains, and a
+  // zero-loss scenario reports concealment. A counter that is non-zero when
+  // nothing went wrong is a counter nobody reads.
+  //
+  // The flag is advisory and may be lost, in which case the tail is concealed
+  // as before -- which is the correct fallback, because a lost end flag is
+  // indistinguishable from a sender that stopped abruptly.
+  [[nodiscard]] bool talkspurt_ended() const noexcept { return has_end_; }
+
   [[nodiscard]] std::uint64_t anchors() const noexcept { return anchors_; }
   [[nodiscard]] std::uint64_t foreign() const noexcept { return foreign_; }
   [[nodiscard]] std::uint64_t decode_errors() const noexcept {
@@ -286,6 +301,10 @@ class JitterBuffer {
   std::uint32_t playout_ts_ = 0;
 
   std::uint32_t conceal_run_ = 0;
+
+  // The sequence the sender said was its last, if it said so.
+  bool has_end_ = false;
+  std::uint32_t end_sequence_ = 0;
 
   std::uint64_t from_packet_ = 0;
   std::uint64_t fec_recovered_ = 0;

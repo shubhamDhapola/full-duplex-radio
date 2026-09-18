@@ -510,6 +510,98 @@ TEST_CASE("a long DTX gap conceals, mutes, and is put back by the talkspurt") {
   CHECK(run.count(JitterBuffer::Source::Packet) == 8);
 }
 
+TEST_CASE("a talkspurt that says it ended drains to silence, not concealment") {
+  const Wire wire = encode_wire(6, false);
+
+  std::vector<Arrival> arrivals = perfect(wire);
+  // Spec 3.1: the sender flags the last packet it intends to send.
+  arrivals.back().packet.header.flags |= proto::media_flag::kTalkspurtEnd;
+
+  JitterBuffer buffer;
+  REQUIRE(buffer.open(default_config()));
+
+  // Well past the end of the audio, so the buffer spends most of the run with
+  // nothing to play.
+  const Transcript run = drive(buffer, arrivals, 20);
+
+  CHECK(buffer.talkspurt_ended());
+  CHECK(buffer.from_packet() == 6);
+
+  // The whole point: nothing was invented and nothing was reported as a hole
+  // in the audio, because the sender said there was no more audio coming.
+  CHECK(buffer.concealed() == 0);
+  CHECK(buffer.muted() == 0);
+
+  for (std::size_t k = 9; k < 20; ++k) {
+    CHECK(run.pulls[k].source == JitterBuffer::Source::Silence);
+  }
+}
+
+TEST_CASE("without the end flag the same tail is concealed") {
+  const Wire wire = encode_wire(6, false);
+
+  JitterBuffer buffer;
+  REQUIRE(buffer.open(default_config()));
+
+  // Identical run with the flag withheld -- the case where it was lost, or the
+  // sender stopped abruptly. Concealing is the right fallback: a missing end
+  // flag is indistinguishable from a sender that died mid-word.
+  drive(buffer, perfect(wire), 20);
+
+  CHECK_FALSE(buffer.talkspurt_ended());
+  CHECK(buffer.concealed() == default_config().max_conceal_run);
+  CHECK(buffer.muted() == 1);
+}
+
+TEST_CASE("an end flag does not silence a frame still ahead of the cursor") {
+  const Wire wire = encode_wire(8, false);
+
+  std::vector<Arrival> arrivals = perfect(wire);
+  arrivals.back().packet.header.flags |= proto::media_flag::kTalkspurtEnd;
+  // The last packet overtakes two of its predecessors, so the end flag is
+  // known while frames before it are still due. Those must still be played.
+  arrivals.back().at = Wire::sent_at(5);
+
+  JitterBuffer buffer;
+  REQUIRE(buffer.open(default_config()));
+
+  const Transcript run = drive(buffer, arrivals, 12);
+
+  CHECK(buffer.talkspurt_ended());
+  CHECK(buffer.from_packet() == 8);
+  for (std::size_t k = 3; k < 11; ++k) {
+    CHECK(run.pulls[k].source == JitterBuffer::Source::Packet);
+    CHECK(run.pulls[k].sequence ==
+          kBaseSeq + static_cast<std::uint32_t>(k - 3));
+  }
+}
+
+TEST_CASE("a new talkspurt clears the previous one's end marker") {
+  const Wire wire = encode_wire(10, false);
+
+  std::vector<Arrival> arrivals;
+  for (std::size_t f = 0; f < 4; ++f) {
+    proto::MediaPacket packet = wire.frame(f);
+    if (f == 3) packet.header.flags |= proto::media_flag::kTalkspurtEnd;
+    arrivals.push_back({packet, Wire::sent_at(f)});
+  }
+  for (std::size_t f = 4; f < 8; ++f) {
+    proto::MediaPacket packet = wire.frame(f);
+    packet.header.timestamp += 2 * kFrameSamples;
+    if (f == 4) packet.header.flags |= proto::media_flag::kTalkspurtStart;
+    arrivals.push_back({packet, Wire::sent_at(f) + 2 * kFrameUs});
+  }
+
+  JitterBuffer buffer;
+  REQUIRE(buffer.open(default_config()));
+  drive(buffer, arrivals, 13);
+
+  // The second talkspurt never said it ended, so the marker from the first one
+  // must not still be suppressing concealment.
+  CHECK_FALSE(buffer.talkspurt_ended());
+  CHECK(buffer.from_packet() == 8);
+}
+
 TEST_CASE("a sequence far beyond the window resyncs onto itself") {
   const Wire wire = encode_wire(8, false);
 
