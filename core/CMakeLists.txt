@@ -35,6 +35,19 @@ endif()
 target_include_directories(radio_core PUBLIC include)
 target_link_libraries(radio_core PRIVATE radio_warnings PUBLIC radio_sanitizers)
 
+# C++20 as a usage requirement, not just a directory-scoped variable.
+#
+# The top-level CMAKE_CXX_STANDARD only reaches this directory and below, so a
+# consumer that adds this repository with add_subdirectory and defines its own
+# targets in the parent scope gets the compiler default instead -- and the
+# first symptom is `no template named 'span' in namespace 'std'` from
+# bytes.hpp, a hundred lines into an unrelated header. The Android JNI library
+# hit exactly that; the Swift-facing library in M9 would have hit it next.
+#
+# Stating it on the target means anything that links radio_core is compiled the
+# way radio_core's headers require, wherever it is defined.
+target_compile_features(radio_core PUBLIC cxx_std_20)
+
 # Header-only pieces are still listed so IDEs and `cmake --build --target help`
 # see them, and so a syntax error in one fails the build rather than waiting for
 # a consumer to include it.

@@ -86,8 +86,8 @@ Goal: a phone talking to `radiobench` on a workstation, then phone to phone.
 Testing against the host peer first puts a debugger, packet capture and full
 tracing on one end of every call.
 
-- [ ] Gradle project, Kotlin, Jetpack Compose, `minSdk 26`
-- [ ] CMake integration linking the core for arm64-v8a and x86_64
+- [x] Gradle project, Kotlin, Jetpack Compose, `minSdk 26`
+- [x] CMake integration linking the core for arm64-v8a and x86_64
 - [ ] Oboe capture and playback in low-latency mode
 - [ ] JNI boundary carrying commands and state, never on the audio callback
 - [ ] Push-to-talk UI, peer list, connection state

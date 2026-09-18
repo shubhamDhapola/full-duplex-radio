@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose draws everything, so the platform theme only has to avoid a
+         flash of the wrong colour before the first frame. -->
+    <style name="Theme.Fdradio" parent="android:Theme.Material.NoActionBar" />
+</resources>
