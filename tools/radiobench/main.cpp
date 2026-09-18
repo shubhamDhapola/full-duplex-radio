@@ -24,6 +24,8 @@ int main(int argc, char** argv) {
       return radiobench::run_ping(*options);
     case radiobench::Options::Mode::Send:
       return radiobench::run_send(*options);
+    case radiobench::Options::Mode::WavLoop:
+      return radiobench::run_wavloop(*options);
     case radiobench::Options::Mode::None:
       break;
   }

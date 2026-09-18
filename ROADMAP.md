@@ -70,7 +70,7 @@ measurement is compared against.
       against
 - [x] Packet-loss concealment and FEC-assisted recovery
 - [x] Late-packet accounting, separate from loss
-- [ ] `radiobench wavloop` with per-frame stage tracing
+- [x] `radiobench wavloop` with per-frame stage tracing
 - [ ] Unattended benchmark matrix over the impairment scenarios
 - [ ] Per-stage latency budget with measured figures
 

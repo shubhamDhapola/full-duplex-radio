@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "radio/endpoint.hpp"
 #include "radio/impairment.hpp"
@@ -32,6 +33,19 @@ struct Scenario {
 
 [[nodiscard]] std::optional<Scenario> parse_arguments(int argc, char** argv);
 [[nodiscard]] bool load_scenario_file(const std::string& path, Scenario& out);
+
+// Applies one scenario key to one impairment model. Public because radiobench
+// consumes the same files and the same `key=value` arguments: the benchmark
+// matrix compares a run through the `impair` proxy against a run through
+// `radiobench wavloop`, and that comparison is only meaningful if both read the
+// scenario with the same parser rather than with two that agree today.
+//
+// Returns false for an unknown key or an unparseable value, so a typo is an
+// error rather than a silently ignored line -- a misspelled `loss_percnt` would
+// otherwise produce a clean-looking run with no loss in it at all.
+[[nodiscard]] bool apply_impairment_key(radio::sim::Impairment& target,
+                                        std::string_view key,
+                                        std::string_view value);
 void print_usage(std::FILE* out);
 void describe(const Scenario& scenario, std::FILE* out);
 

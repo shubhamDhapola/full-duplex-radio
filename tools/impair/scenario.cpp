@@ -53,12 +53,10 @@ bool parse_shape(std::string_view text, JitterShape& out) {
   return true;
 }
 
-// Applies one key to one direction's impairment. Returns false for an unknown
-// key, so a typo in a scenario file is an error rather than a silently ignored
-// line -- a misspelled `loss_percnt` would otherwise produce a clean-looking
-// run with no loss at all.
-bool apply_key(Impairment& target, std::string_view key,
-               std::string_view value) {
+}  // namespace
+
+bool apply_impairment_key(Impairment& target, std::string_view key,
+                          std::string_view value) {
   double number = 0.0;
 
   if (key == "base_delay_ms") {
@@ -99,12 +97,10 @@ bool apply_key(Impairment& target, std::string_view key,
   return false;
 }
 
-}  // namespace
-
 bool load_scenario_file(const std::string& path, Scenario& out) {
   std::ifstream file(path);
   if (!file) {
-    std::fprintf(stderr, "impair: cannot open scenario '%s'\n", path.c_str());
+    std::fprintf(stderr, "scenario: cannot open '%s'\n", path.c_str());
     return false;
   }
 
@@ -117,7 +113,7 @@ bool load_scenario_file(const std::string& path, Scenario& out) {
 
     const auto equals = text.find('=');
     if (equals == std::string_view::npos) {
-      std::fprintf(stderr, "impair: %s:%d: expected key = value\n",
+      std::fprintf(stderr, "scenario: %s:%d: expected key = value\n",
                    path.c_str(), line_number);
       return false;
     }
@@ -133,16 +129,16 @@ bool load_scenario_file(const std::string& path, Scenario& out) {
     // Direction prefixes. Unprefixed applies to both.
     bool ok = false;
     if (key.starts_with("up.")) {
-      ok = apply_key(out.upstream, key.substr(3), value);
+      ok = apply_impairment_key(out.upstream, key.substr(3), value);
     } else if (key.starts_with("down.")) {
-      ok = apply_key(out.downstream, key.substr(5), value);
+      ok = apply_impairment_key(out.downstream, key.substr(5), value);
     } else {
-      ok = apply_key(out.upstream, key, value) &&
-           apply_key(out.downstream, key, value);
+      ok = apply_impairment_key(out.upstream, key, value) &&
+           apply_impairment_key(out.downstream, key, value);
     }
 
     if (!ok) {
-      std::fprintf(stderr, "impair: %s:%d: bad key or value '%.*s'\n",
+      std::fprintf(stderr, "scenario: %s:%d: bad key or value '%.*s'\n",
                    path.c_str(), line_number, static_cast<int>(text.size()),
                    text.data());
       return false;
@@ -313,12 +309,12 @@ std::optional<Scenario> parse_arguments(int argc, char** argv) {
       const std::string_view raw = flag.substr(equals + 1);
       bool ok = false;
       if (key.starts_with("up.")) {
-        ok = apply_key(scenario.upstream, key.substr(3), raw);
+        ok = apply_impairment_key(scenario.upstream, key.substr(3), raw);
       } else if (key.starts_with("down.")) {
-        ok = apply_key(scenario.downstream, key.substr(5), raw);
+        ok = apply_impairment_key(scenario.downstream, key.substr(5), raw);
       } else {
-        ok = apply_key(scenario.upstream, key, raw) &&
-             apply_key(scenario.downstream, key, raw);
+        ok = apply_impairment_key(scenario.upstream, key, raw) &&
+             apply_impairment_key(scenario.downstream, key, raw);
       }
       if (!ok) {
         std::fprintf(stderr, "impair: bad key or value '%.*s'\n",

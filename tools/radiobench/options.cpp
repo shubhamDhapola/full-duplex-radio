@@ -4,6 +4,8 @@
 #include <cstring>
 #include <string_view>
 
+#include "scenario.hpp"
+
 namespace radiobench {
 namespace {
 
@@ -38,6 +40,9 @@ USAGE
   radiobench ping    --peer HOST:PORT [--count N] [--interval MS] [--timeout MS] [--json]
   radiobench send    --peer HOST:PORT [--rate PPS] [--size B] [--duration S]
                      [--seed N] [--trace FILE] [--json]
+  radiobench wavloop --in FILE.wav [--out FILE.wav] [--scenario FILE] [--seed N]
+                     [--fec] [--bitrate BPS] [--expected-loss PCT]
+                     [--target-delay MS] [--trace FILE] [--json] [key=value ...]
 
 MODES
   respond   Act as a peer: reply to PING with PONG and account for received
@@ -46,6 +51,10 @@ MODES
   ping      Measure RTT and estimate the clock offset from the four-timestamp
             exchange of specification section 4.1.
   send      Transmit a paced AUDIO stream with sequence numbers and timestamps.
+  wavloop   The whole media pipeline in one process, in real time:
+            wav -> Opus -> UDP -> impairment -> jitter buffer -> decode -> wav.
+            One clock on both ends, so end-to-end latency is measured exactly
+            rather than estimated through a clock offset.
 
 OPTIONS
   --peer HOST:PORT   Remote endpoint. IPv6 in brackets: [fe80::1%%en0]:47000
@@ -57,9 +66,19 @@ OPTIONS
   --size B           Payload bytes per packet (default 80)
   --duration S       Seconds to transmit (default 10)
   --seed N           Fix stream id / sequence / timestamp start for reproducibility
+  --in FILE          wavloop: input WAV, 16-bit PCM at 48 kHz
+  --out FILE         wavloop: write the playout stream here (default: none)
+  --scenario FILE    wavloop: impairment scenario, same format as `impair`
+  --fec              wavloop: enable Opus in-band FEC
+  --bitrate BPS      wavloop: encoder bitrate (default 32000)
+  --expected-loss P  wavloop: loss hint driving FEC redundancy (default 0)
+  --target-delay MS  wavloop: jitter buffer depth (default 60)
   --trace FILE       Write per-packet stage timestamps as CSV
   --json             Emit the report as JSON instead of a table
   -h, --help         This message
+
+  wavloop also accepts bare `key=value` impairment settings, exactly as
+  `impair` does; see `impair --help` for the key list.
 
 EXAMPLES
   # terminal 1
@@ -68,6 +87,13 @@ EXAMPLES
   # terminal 2
   radiobench ping --peer 127.0.0.1:47000 --count 50 --interval 100
   radiobench send --peer 127.0.0.1:47000 --rate 50 --duration 5 --seed 42
+
+  # the M1 comparison: one impairment pattern, FEC off then on
+  radiobench wavloop --in speech.wav --out off.wav --seed 42 \
+                     --scenario benchmarks/scenarios/poor.conf
+  radiobench wavloop --in speech.wav --out on.wav  --seed 42 \
+                     --scenario benchmarks/scenarios/poor.conf \
+                     --fec --expected-loss 20
 )",
                static_cast<unsigned>(kDefaultPort));
 }
@@ -91,6 +117,8 @@ std::optional<Options> parse_options(int argc, char** argv) {
     options.mode = Options::Mode::Ping;
   } else if (mode == "send") {
     options.mode = Options::Mode::Send;
+  } else if (mode == "wavloop") {
+    options.mode = Options::Mode::WavLoop;
   } else {
     std::fprintf(stderr, "radiobench: unknown mode '%.*s'\n\n",
                  static_cast<int>(mode.size()), mode.data());
@@ -210,6 +238,74 @@ std::optional<Options> parse_options(int argc, char** argv) {
       options.trace_path = value;
       continue;
     }
+    if (flag == "--in") {
+      if ((value = value_for(i, flag)) == nullptr) return std::nullopt;
+      options.wav_in = value;
+      continue;
+    }
+    if (flag == "--out") {
+      if ((value = value_for(i, flag)) == nullptr) return std::nullopt;
+      options.wav_out = value;
+      continue;
+    }
+    if (flag == "--scenario") {
+      if ((value = value_for(i, flag)) == nullptr) return std::nullopt;
+      impair::Scenario scenario;
+      if (!impair::load_scenario_file(value, scenario)) return std::nullopt;
+      // Upstream only. wavloop models one direction, because the thing it
+      // measures -- a frame's journey from capture to playout -- only travels
+      // one way. A return path would be M5's problem, not this one's.
+      options.impairment = scenario.upstream;
+      options.scenario_name = scenario.name;
+      continue;
+    }
+    if (flag == "--fec") {
+      options.fec = true;
+      continue;
+    }
+    if (flag == "--bitrate") {
+      if ((value = value_for(i, flag)) == nullptr) return std::nullopt;
+      if (!parse_integer(value, options.bitrate_bps) ||
+          options.bitrate_bps <= 0) {
+        std::fprintf(stderr, "radiobench: bad bitrate '%s'\n", value);
+        return std::nullopt;
+      }
+      continue;
+    }
+    if (flag == "--expected-loss") {
+      if ((value = value_for(i, flag)) == nullptr) return std::nullopt;
+      if (!parse_integer(value, options.expected_loss_percent) ||
+          options.expected_loss_percent < 0 ||
+          options.expected_loss_percent > 100) {
+        std::fprintf(stderr, "radiobench: bad expected loss '%s'\n", value);
+        return std::nullopt;
+      }
+      continue;
+    }
+    if (flag == "--target-delay") {
+      if ((value = value_for(i, flag)) == nullptr) return std::nullopt;
+      if (!parse_integer(value, options.target_delay_ms)) {
+        std::fprintf(stderr, "radiobench: bad target delay '%s'\n", value);
+        return std::nullopt;
+      }
+      continue;
+    }
+
+    // Bare `key=value` impairment settings, the same ones `impair` takes. They
+    // come after the scenario file in the argument list precisely so they can
+    // override it, which is how the matrix sweeps one knob at a time.
+    const auto equals = flag.find('=');
+    if (options.mode == Options::Mode::WavLoop &&
+        equals != std::string_view::npos && equals != 0) {
+      if (!impair::apply_impairment_key(options.impairment,
+                                        flag.substr(0, equals),
+                                        flag.substr(equals + 1))) {
+        std::fprintf(stderr, "radiobench: bad setting '%.*s'\n",
+                     static_cast<int>(flag.size()), flag.data());
+        return std::nullopt;
+      }
+      continue;
+    }
 
     std::fprintf(stderr, "radiobench: unknown option '%.*s'\n",
                  static_cast<int>(flag.size()), flag.data());
@@ -221,6 +317,24 @@ std::optional<Options> parse_options(int argc, char** argv) {
       !options.peer.valid()) {
     std::fprintf(stderr, "radiobench: this mode requires --peer HOST:PORT\n");
     return std::nullopt;
+  }
+
+  if (options.mode == Options::Mode::WavLoop) {
+    if (options.wav_in.empty()) {
+      std::fprintf(stderr, "radiobench: wavloop requires --in FILE.wav\n");
+      return std::nullopt;
+    }
+    // Opus emits no redundancy at all unless it also believes packets are
+    // being lost, so --fec alone is a silent no-op and the encoder rejects it.
+    // Defaulting the hint from the scenario would be convenient and wrong: the
+    // sender does not know the loss rate, it estimates it, and pretending
+    // otherwise would flatter every FEC result in the matrix.
+    if (options.fec && options.expected_loss_percent == 0) {
+      std::fprintf(stderr,
+                   "radiobench: --fec needs --expected-loss PCT above 0, "
+                   "or Opus emits no redundancy at all\n");
+      return std::nullopt;
+    }
   }
 
   return options;

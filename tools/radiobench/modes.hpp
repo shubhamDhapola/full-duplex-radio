@@ -7,5 +7,6 @@ namespace radiobench {
 int run_respond(const Options& options);
 int run_ping(const Options& options);
 int run_send(const Options& options);
+int run_wavloop(const Options& options);
 
 }  // namespace radiobench

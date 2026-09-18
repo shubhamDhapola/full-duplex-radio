@@ -4,5 +4,6 @@
 #
 # `impair` is the seeded network impairment proxy that makes the benchmark
 # numbers reproducible.
-add_subdirectory(radiobench)
+# impair first: it defines the scenario-parser library radiobench links.
 add_subdirectory(impair)
+add_subdirectory(radiobench)
