@@ -40,6 +40,7 @@ add_executable(radio_tests
   test_udp_socket.cpp
   test_pacer.cpp
   test_clock_sync.cpp
+  test_prober.cpp
   test_trace.cpp
   test_impairment.cpp
   test_conformance.cpp

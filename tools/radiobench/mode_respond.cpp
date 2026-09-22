@@ -4,6 +4,7 @@
 
 #include "modes.hpp"
 #include "radio/jitter_estimator.hpp"
+#include "radio/prober.hpp"
 #include "radio/proto.hpp"
 #include "radio/seq_tracker.hpp"
 #include "radio/udp_socket.hpp"
@@ -214,7 +215,6 @@ int run_respond(const Options& options) {
 
   std::array<std::byte, proto::kMaxDatagram> incoming{};
   std::array<std::byte, proto::kMaxDatagram> outgoing{};
-  std::array<std::byte, proto::kPongBodySize> pong_body{};
 
   while (!stop_requested()) {
     // A 100 ms poll rather than an indefinite wait, so Ctrl-C is noticed
@@ -242,25 +242,17 @@ int run_respond(const Options& options) {
           continue;
         }
 
-        proto::PongBody body;
-        body.orig_t1 = packet.value.header.send_time_us;
-        body.recv_t2 = received.arrival_us;
-        if (proto::encode_pong_body(body, pong_body) == 0) {
-          ++pong_failed;
-          continue;
-        }
-
-        proto::ControlHeader header;
-        header.type = proto::Type::Pong;
-        header.request_id = packet.value.header.request_id;
-        // t3, taken as late as possible. The gap between recv_t2 and this is
-        // our own processing time, and the RTT formula subtracts it out -- so a
-        // slow responder does not inflate the peer's measurement of the
-        // network.
-        header.send_time_us = now_us();
-
-        const std::size_t length =
-            proto::encode_control(header, pong_body, outgoing);
+        // Shared with the device responder in core/src/net/prober.cpp rather
+        // than written twice. The phone and this tool answering a PING from
+        // literally the same code is what makes a figure measured against one
+        // comparable with a figure measured against the other.
+        //
+        // t3 is read here, as late as possible: the gap between arrival and it
+        // is our own processing time, and the prober's RTT formula subtracts it
+        // out, so a slow responder does not inflate the peer's measurement of
+        // the network.
+        const std::size_t length = encode_pong_for(
+            packet.value, received.arrival_us, now_us(), outgoing);
         if (length == 0) {
           ++pong_failed;
           continue;

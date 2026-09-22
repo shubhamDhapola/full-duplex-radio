@@ -16,6 +16,7 @@ add_library(radio_core STATIC
   src/net/endpoint.cpp
   src/net/udp_socket.cpp
   src/net/pacer.cpp
+  src/net/prober.cpp
   src/sim/impairment.cpp
 )
 
@@ -60,6 +61,7 @@ target_sources(radio_core PRIVATE
   include/radio/impairment.hpp
   include/radio/jitter_estimator.hpp
   include/radio/pacer.hpp
+  include/radio/prober.hpp
   include/radio/proto.hpp
   include/radio/reorder_queue.hpp
   include/radio/seq_tracker.hpp
