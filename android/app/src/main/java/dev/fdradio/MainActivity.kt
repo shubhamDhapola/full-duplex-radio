@@ -326,15 +326,49 @@ private fun SessionCard(s: Session.Snapshot) {
     Card(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
         Column(modifier = Modifier.padding(14.dp)) {
             Text(
-                if (s.transmitting) "transport · transmitting" else "transport",
+                buildString {
+                    append("transport · link ")
+                    append(s.link.label)
+                    if (s.transmitting) append(" · transmitting")
+                },
                 style = MaterialTheme.typography.titleSmall,
+                color = when (s.link) {
+                    Session.Link.UP -> MaterialTheme.colorScheme.primary
+                    Session.Link.LOST -> MaterialTheme.colorScheme.error
+                    else -> MaterialTheme.colorScheme.onSurface
+                },
             )
             val lines = buildString {
                 fun row(label: String, value: String) =
                     append(label.padEnd(15)).append(value).append('\n')
 
+                // RTT first, because it is the only figure here that says
+                // anything before the button is pressed. `best` is the
+                // lowest-RTT sample in the window and is the one the offset is
+                // taken from -- clock_sync.hpp explains why the minimum is
+                // selected rather than the mean averaged.
+                if (s.pongsReceived > 0) {
+                    row("rtt", "${fmt3(s.rttLastMillis)} ms now, ${fmt3(s.rttBestMillis)} ms best")
+                    // Quoted with its error bar, always. The offset assumes the
+                    // two one-way delays are equal, and nothing in the exchange
+                    // can check that, so the uncertainty is not decoration.
+                    row("clock offset", "${fmt3(s.offsetUs / 1000.0)} +/- ${fmt3(s.offsetUncertaintyUs / 1000.0)} ms")
+                } else {
+                    row("rtt", "no reply from peer (${s.probesSent} probes)")
+                }
+                row("probes", "${s.probesSent} sent, ${s.probesTimedOut} lost (${fmt(s.probesUnanswered)}%)")
+                if (s.pongsSent > 0) row("answered", "${s.pongsSent} pings from peers")
+
                 row("sent", "${s.packetsSent} pkt, ${s.bytesSent / 1024} KiB, ${s.talkspurts} talkspurt")
                 row("received", "${s.datagramsReceived} pkt, ${s.rejected} rejected")
+                // Measured at the socket, on the arrival timestamp, so these
+                // describe the path. The playout counters below describe what
+                // was done about it.
+                if (s.rxReceived > 0) {
+                    row("net jitter", "${fmt3(s.rxJitterMillis)} ms")
+                    row("net loss", "${s.rxLost} of ${s.rxReceived + s.rxLost} (${fmt(s.rxLossPercent)}%)")
+                    if (s.rxReordered > 0) row("reordered", "${s.rxReordered}")
+                }
                 row("played", "${s.fromPacket} pkt / ${s.fecRecovered} fec / ${s.concealed} concealed")
                 // `late` only. The queue's `gaps` counter also ticks for
                 // every idle position after a talkspurt ends -- 105 of them in
@@ -350,6 +384,13 @@ private fun SessionCard(s: Session.Snapshot) {
                 if (s.encodeFailed > 0) row("encode failed", "${s.encodeFailed}")
                 if (s.rxRingOverflows > 0) row("rx overflow", "${s.rxRingOverflows}")
                 if (s.txPcmOverflows > 0) row("tx overflow", "${s.txPcmOverflows}")
+                // Each of these is a finding rather than a statistic: on a LAN
+                // a non-zero value means a peer is mis-implementing PONG or
+                // replies are being matched to the wrong probe.
+                if (s.probesStale > 0) row("stale pong", "${s.probesStale}")
+                if (s.probesBadEcho > 0) row("bad echo", "${s.probesBadEcho}")
+                if (s.probesImpossible > 0) row("impossible", "${s.probesImpossible}")
+                if (s.unhandled > 0) row("unhandled", "${s.unhandled} (peer ahead of us)")
             }
             Text(
                 lines.trimEnd(),
@@ -400,3 +441,7 @@ private fun api(aaudio: Boolean) = if (aaudio) "AAudio" else "OpenSL"
 private fun mode(lowLatency: Boolean) = if (lowLatency) "LowLatency" else "NOT-LOW"
 
 private fun fmt(value: Double) = String.format("%.2f", value)
+
+// Milliseconds to three places, so the resolution shown is the microsecond the
+// figure was actually measured in rather than an implied rounding.
+private fun fmt3(value: Double) = String.format("%.3f", value)

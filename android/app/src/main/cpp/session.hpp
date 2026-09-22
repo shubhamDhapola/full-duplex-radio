@@ -12,12 +12,29 @@
 #include "radio/clock.hpp"
 #include "radio/endpoint.hpp"
 #include "radio/jitter_buffer.hpp"
+#include "radio/jitter_estimator.hpp"
 #include "radio/opus_codec.hpp"
+#include "radio/prober.hpp"
 #include "radio/proto.hpp"
+#include "radio/seq_tracker.hpp"
 #include "radio/spsc_ring.hpp"
 #include "radio/udp_socket.hpp"
 
 namespace fdradio {
+
+// What the screen is allowed to call "connected".
+//
+// UDP has no connection, so there is nothing to ask. Any state shown has to be
+// *inferred from something measured*, and the only measurement available is
+// whether the peer answered a probe recently. Stating it that way keeps the
+// indicator honest: it cannot say "connected" about a peer that has stopped
+// answering, which is exactly the case a socket-level check would get wrong.
+enum class Link : std::int32_t {
+  Idle = 0,     // no session running
+  Probing = 1,  // probing, and nothing has ever come back
+  Up = 2,       // a PONG arrived within kLinkTimeoutUs
+  Lost = 3,     // it answered once and has stopped
+};
 
 // The same pipeline `radiobench wavloop` runs on the host, with the microphone
 // and the speaker in place of the WAV files:
@@ -58,7 +75,13 @@ namespace fdradio {
 // only the playback callback touches it. The network thread hands whole
 // datagrams over an SpscRing, which is the arrangement reorder_queue.hpp
 // describes.
-class Session : public Pipeline {
+// `final` rather than a virtual destructor. Pipeline deliberately has a
+// protected non-virtual one -- it is a callback interface, not an owner, and
+// nothing ever deletes through it -- but that leaves Session itself with
+// virtual functions and a public destructor, which -Wnon-virtual-dtor flags.
+// Sealing the class removes the possibility the warning is about rather than
+// paying for a vtable slot nobody uses.
+class Session final : public Pipeline {
  public:
   struct Config {
     radio::net::Endpoint peer{};
@@ -67,6 +90,13 @@ class Session : public Pipeline {
     bool fec = false;
     int expected_loss_percent = 0;
     std::uint32_t target_delay_ms = 60;
+
+    // Probe spacing and patience, matching `radiobench ping`'s defaults on
+    // purpose: a figure off this screen and a figure off the host tool have to
+    // be comparable, and they are not comparable if they were sampled on
+    // different schedules.
+    std::uint32_t probe_interval_ms = 200;
+    std::uint32_t probe_timeout_ms = 1'000;
   };
 
   struct Snapshot {
@@ -106,6 +136,34 @@ class Session : public Pipeline {
     std::int64_t decode_max_us = 0;
 
     std::int64_t tx_pcm_overflows = 0;
+
+    // The link, from PING/PONG (spec section 4.1). RTT here is a *network*
+    // measurement: the exchange subtracts the time the peer spent thinking, so
+    // a slow responder does not inflate it. See clock_sync.hpp for the algebra
+    // and for why the best sample is selected rather than averaged.
+    std::int32_t link = 0;  // fdradio::Link
+    std::int64_t probes_sent = 0;
+    std::int64_t pongs_received = 0;
+    std::int64_t probes_timed_out = 0;
+    std::int64_t probes_stale = 0;
+    std::int64_t probes_bad_echo = 0;
+    std::int64_t probes_impossible = 0;
+    std::int64_t pongs_sent = 0;  // PINGs we answered, as somebody else's peer
+    std::int64_t rtt_last_us = 0;
+    std::int64_t rtt_best_us = 0;
+    std::int64_t offset_us = 0;
+    std::int64_t offset_uncertainty_us = 0;
+
+    // Interarrival jitter and sequence accounting on the stream we receive,
+    // measured at the socket rather than at playout. `late`, `concealed` and
+    // `depth_frames` above describe what playout did about the network;
+    // these describe what the network did.
+    std::int64_t rx_jitter_us = 0;
+    std::int64_t rx_received = 0;
+    std::int64_t rx_lost = 0;
+    std::int64_t rx_duplicates = 0;
+    std::int64_t rx_reordered = 0;
+    std::int64_t unhandled = 0;
   };
 
   Session() = default;
@@ -132,11 +190,21 @@ class Session : public Pipeline {
   void on_playout(std::int16_t* pcm, std::int32_t frames) noexcept override;
 
  private:
-  // A received datagram, whole, so the network thread never touches the jitter
-  // buffer. Trivially copyable because SpscRing bulk-copies raw bytes.
+  // A received media datagram, whole, so the network thread never touches the
+  // jitter buffer. Trivially copyable because SpscRing bulk-copies raw bytes.
+  //
+  // The parsed header travels with the bytes rather than being re-derived on
+  // the other side. The network thread has to parse anyway -- it cannot do
+  // sequence or jitter accounting otherwise -- and carrying the result means
+  // the playback callback has no parse step and no "this cannot fail" branch.
+  // The payload stays a *view*, reconstructed from the offset, because
+  // proto::MediaPacket holds a ByteView into the receive buffer and that buffer
+  // is now this ring slot.
   struct Datagram {
     radio::Micros arrival_us;
-    std::uint16_t length;
+    radio::proto::MediaHeader header;
+    std::uint16_t payload_offset;
+    std::uint16_t payload_length;
     std::array<std::byte, radio::proto::kMaxDatagram> bytes;
   };
 
@@ -149,9 +217,25 @@ class Session : public Pipeline {
   // milliseconds; this much headroom means an overflow is a starved thread.
   static constexpr std::size_t kTxPcmSamples = 16'384;
 
+  // How long without a PONG before the link stops being called up. Five probe
+  // intervals at the default: long enough that one lost probe is not a
+  // disconnection, short enough to notice a peer that walked out of range
+  // before the audio makes it obvious.
+  static constexpr radio::Micros kLinkTimeoutUs = 1'000'000;
+
   void network_loop() noexcept;
   void transmit_available() noexcept;
   void receive_available() noexcept;
+
+  // The probing half, all on the network thread. The matching itself lives in
+  // radio::Prober, where it is unit-tested with invented timestamps and no
+  // socket; what is left here is the I/O around it.
+  void probe_if_due(radio::Micros now) noexcept;
+  void answer_ping(const radio::proto::ControlPacket& packet,
+                   const radio::net::Endpoint& from, radio::Micros t2) noexcept;
+  void publish_probe_stats(radio::Micros now) noexcept;
+  void observe_media(const radio::proto::MediaHeader& header,
+                     radio::Micros arrival_us) noexcept;
 
   radio::net::UdpSocket socket_;
   radio::audio::Encoder encoder_;
@@ -171,6 +255,21 @@ class Session : public Pipeline {
   std::uint32_t sequence_ = 0;
   std::uint32_t timestamp_ = 0;
   bool talkspurt_open_ = false;
+
+  // The prober and the receive-path accounting, also network-thread-only.
+  // None of these is atomic and none needs to be: one thread writes them, and
+  // what the UI reads are the published scalars below.
+  //
+  // Prober, SeqTracker and JitterEstimator are the same instruments the host
+  // tools use. Running the identical code on both ends is the point --
+  // otherwise a phone figure and a host figure differ for reasons nobody can
+  // separate from the network.
+  radio::Prober prober_;
+
+  radio::SeqTracker rx_seq_;
+  radio::JitterEstimator rx_jitter_;
+  std::uint32_t rx_stream_id_ = 0;
+  bool rx_stream_open_ = false;
 
   // Playout staging. The device asks for 96 or 192 samples at a time while the
   // codec produces 960, so one decoded frame is held and served in pieces.
@@ -192,6 +291,30 @@ class Session : public Pipeline {
   std::atomic<std::int64_t> decode_total_us_{0};
   std::atomic<std::int64_t> decode_max_us_{0};
   std::atomic<std::int32_t> last_error_{0};
+
+  std::atomic<std::int32_t> link_{static_cast<std::int32_t>(Link::Idle)};
+  std::atomic<std::int64_t> probes_sent_{0};
+  std::atomic<std::int64_t> pongs_received_{0};
+  std::atomic<std::int64_t> probes_timed_out_{0};
+  std::atomic<std::int64_t> probes_stale_{0};
+  std::atomic<std::int64_t> probes_bad_echo_{0};
+  std::atomic<std::int64_t> probes_impossible_{0};
+  std::atomic<std::int64_t> pongs_sent_{0};
+  std::atomic<std::int64_t> rtt_last_us_{0};
+  std::atomic<std::int64_t> rtt_best_us_{0};
+  std::atomic<std::int64_t> offset_us_{0};
+  std::atomic<std::int64_t> offset_uncertainty_us_{0};
+
+  // Jitter is published in whole microseconds. JitterEstimator carries it as a
+  // double, but the screen shows milliseconds to three places, so a microsecond
+  // *is* the display resolution -- and an integer crosses to another thread
+  // without the tearing a 64-bit double would need care to avoid.
+  std::atomic<std::int64_t> rx_jitter_us_{0};
+  std::atomic<std::int64_t> rx_received_{0};
+  std::atomic<std::int64_t> rx_lost_{0};
+  std::atomic<std::int64_t> rx_duplicates_{0};
+  std::atomic<std::int64_t> rx_reordered_{0};
+  std::atomic<std::int64_t> unhandled_{0};
 };
 
 Session& session() noexcept;

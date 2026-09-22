@@ -6,8 +6,10 @@ source the host benchmarks in [docs/measurements.md](../docs/measurements.md)
 measured. If the Android build needed its own fork of the core, every published
 figure would describe different code from the one shipping.
 
-Right now the app does one thing: run the core's self-check on the device and
-show the result. That is deliberate — see "What this is not" below.
+The app captures from the microphone, encodes, sends over UDP, receives,
+buffers, decodes and plays — the M1 pipeline with real hardware at both ends —
+plus a push-to-talk button, a PING/PONG prober and a diagnostics screen
+reporting the core's own counters.
 
 ## Build
 
@@ -110,6 +112,45 @@ a lock-free ring, and whoever wants to know reads them.
 
 The cost is that the UI learns about an underrun up to one poll interval late.
 For a diagnostics screen that is free.
+
+The same rule decides where the *network* measurements are taken. Jitter, loss
+and rejection are facts about the path, so they are measured on the network
+thread beside the arrival timestamp the kernel handed us — not at playout.
+Measuring them at playout would make them conditional on the audio callback
+still running, so the counters would freeze at exactly the moment you most want
+to read them.
+
+## The control path
+
+Alongside the media there is a probe every 200 ms, and the interval matches
+`radiobench ping`'s default on purpose: a figure read off this screen and a
+figure printed by the host tool are only comparable if they were sampled on the
+same schedule.
+
+**The measurement is the same as the host tool's; only the waiting is
+different.** `radiobench ping` sends a probe and then sits in a receive loop
+until the PONG arrives or the deadline passes, because measuring is all it is
+doing. The network thread here cannot do that — it is also draining the
+microphone and servicing media, and blocking for up to a second would stall
+both. So probes go out on a schedule, the unanswered ones sit in a small table,
+and replies are matched whenever they turn up in the ordinary receive path.
+
+That asynchrony is why the matching is written down carefully in
+[`radio::Prober`](../core/include/radio/prober.hpp) and unit-tested with
+invented timestamps and no socket. With no blocking read to pair a reply with
+its probe, nothing but the request id says which `t1` a given `t4` belongs to —
+and pairing the wrong two does not fail loudly. It produces an RTT that is
+simply wrong and looks entirely plausible.
+
+**The phone answers PINGs as well as sending them**, through the same
+`encode_pong_for()` `radiobench respond` uses. That is what lets the workstation
+measure the phone, and it is half of what phone-to-phone needs.
+
+**"Connected" means "answered recently", and nothing else.** UDP has no
+connection to ask about, so a socket-level check would happily report a healthy
+link to a peer that walked out of range ten seconds ago. The indicator is
+defined as a PONG within the last second, which is a claim the code can actually
+support.
 
 ### What an audio callback may not do
 

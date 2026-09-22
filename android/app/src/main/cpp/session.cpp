@@ -84,6 +84,13 @@ bool Session::start(const Config& config) noexcept {
   talkspurt_open_ = false;
   transmitting_.store(false);
 
+  // Prober and receive-path accounting. Reset before the thread is started, so
+  // the thread never races the reset.
+  prober_.reset();
+  rx_seq_.reset();
+  rx_jitter_.reset();
+  rx_stream_open_ = false;
+
   packets_sent_.store(0);
   bytes_sent_.store(0);
   send_failed_.store(0);
@@ -97,6 +104,25 @@ bool Session::start(const Config& config) noexcept {
   decode_calls_.store(0);
   decode_total_us_.store(0);
   decode_max_us_.store(0);
+
+  link_.store(static_cast<std::int32_t>(Link::Probing));
+  probes_sent_.store(0);
+  pongs_received_.store(0);
+  probes_timed_out_.store(0);
+  probes_stale_.store(0);
+  probes_bad_echo_.store(0);
+  probes_impossible_.store(0);
+  pongs_sent_.store(0);
+  rtt_last_us_.store(0);
+  rtt_best_us_.store(0);
+  offset_us_.store(0);
+  offset_uncertainty_us_.store(0);
+  rx_jitter_us_.store(0);
+  rx_received_.store(0);
+  rx_lost_.store(0);
+  rx_duplicates_.store(0);
+  rx_reordered_.store(0);
+  unhandled_.store(0);
 
   running_.store(true);
   network_ = std::thread([this] { network_loop(); });
@@ -115,6 +141,7 @@ void Session::stop() noexcept {
   socket_.close();
   encoder_.close();
   jitter_.close();
+  link_.store(static_cast<std::int32_t>(Link::Idle));
 }
 
 void Session::set_transmitting(bool on) noexcept {
@@ -133,13 +160,15 @@ void Session::on_playout(std::int16_t* pcm, std::int32_t frames) noexcept {
   // what keeps the buffer single-threaded.
   Datagram datagram;
   while (rx_.pop(datagram)) {
-    const auto parsed = radio::proto::parse_media(
-        radio::ByteView{datagram.bytes.data(), datagram.length});
-    if (!parsed) {
-      rejected_.fetch_add(1, std::memory_order_relaxed);
-      continue;
-    }
-    (void)jitter_.push(parsed.value, datagram.arrival_us);
+    // Already parsed, validated and accounted for on the network thread. All
+    // that is left is to point the payload view at this ring slot, which is
+    // where the bytes now live.
+    radio::proto::MediaPacket packet;
+    packet.header = datagram.header;
+    packet.payload =
+        radio::ByteView{datagram.bytes.data() + datagram.payload_offset,
+                        datagram.payload_length};
+    (void)jitter_.push(packet, datagram.arrival_us);
   }
 
   auto remaining = static_cast<std::size_t>(frames);
@@ -209,14 +238,35 @@ void Session::transmit_available() noexcept {
         header.flags |= radio::proto::media_flag::kTalkspurtEnd;
         if (config_.fec) header.flags |= radio::proto::media_flag::kFec;
 
+        // Counted like any other packet, because it is one. Leaving it out
+        // made the screen report 300 sent where `radiobench respond` counted
+        // 301 received of 301 expected -- a discrepancy that reads as the
+        // receiver inventing a packet, when in fact the sender was not
+        // counting its own.
+        const radio::Micros started = radio::now_us();
         const auto encoded = encoder_.encode(frame, payload);
+        note_time(encode_calls_, encode_total_us_, encode_max_us_,
+                  static_cast<std::int64_t>(radio::now_us() - started));
+
         if (encoded.ok()) {
           const std::size_t length = radio::proto::encode_media(
               header, radio::ByteView{payload.data(), encoded.bytes}, datagram);
           if (length != 0) {
-            (void)socket_.send_to(config_.peer,
-                                  radio::ByteView{datagram.data(), length});
+            const auto sent = socket_.send_to(
+                config_.peer, radio::ByteView{datagram.data(), length});
+            if (sent.ok()) {
+              packets_sent_.fetch_add(1, std::memory_order_relaxed);
+              bytes_sent_.fetch_add(static_cast<std::int64_t>(length),
+                                    std::memory_order_relaxed);
+            } else {
+              send_failed_.fetch_add(1, std::memory_order_relaxed);
+              last_error_.store(sent.error);
+            }
+          } else {
+            encode_failed_.fetch_add(1, std::memory_order_relaxed);
           }
+        } else {
+          encode_failed_.fetch_add(1, std::memory_order_relaxed);
         }
         ++sequence_;
         timestamp_ += radio::kFrameSamples;
@@ -267,21 +317,195 @@ void Session::transmit_available() noexcept {
   }
 }
 
+void Session::observe_media(const radio::proto::MediaHeader& header,
+                            radio::Micros arrival_us) noexcept {
+  // A talkspurt is a stream, so a new stream id means the previous speaker's
+  // accounting is finished and a fresh one begins. Carrying the old sequence
+  // window across would report the whole distance between two random starting
+  // sequences as loss.
+  if (!rx_stream_open_ || header.stream_id != rx_stream_id_) {
+    rx_seq_.reset();
+    rx_jitter_.reset();
+    rx_stream_id_ = header.stream_id;
+    rx_stream_open_ = true;
+  }
+
+  rx_seq_.observe(header.sequence);
+
+  // A talkspurt boundary re-anchors instead of contributing a sample: the
+  // timestamp jump across a silence measures how long the speaker paused, not
+  // anything the network did. Same rule `radiobench respond` applies, and the
+  // reason RFC 3550 jitter needs it is in jitter_estimator.hpp.
+  if (header.talkspurt_start()) {
+    rx_jitter_.reanchor(header.timestamp, arrival_us);
+  } else {
+    rx_jitter_.observe(header.timestamp, arrival_us);
+  }
+
+  rx_received_.store(static_cast<std::int64_t>(rx_seq_.received()),
+                     std::memory_order_relaxed);
+  rx_lost_.store(static_cast<std::int64_t>(rx_seq_.lost()),
+                 std::memory_order_relaxed);
+  rx_duplicates_.store(static_cast<std::int64_t>(rx_seq_.duplicates()),
+                       std::memory_order_relaxed);
+  rx_reordered_.store(static_cast<std::int64_t>(rx_seq_.reordered()),
+                      std::memory_order_relaxed);
+  rx_jitter_us_.store(static_cast<std::int64_t>(rx_jitter_.jitter_us()),
+                      std::memory_order_relaxed);
+}
+
 void Session::receive_available() noexcept {
+  // WHY THE NETWORK THREAD PARSES AND MEASURES, AND THE AUDIO CALLBACK DOES NOT
+  //
+  // Jitter, loss and rejection are facts about the *path*, and the honest place
+  // to measure them is where the datagram arrived -- next to the arrival
+  // timestamp the kernel handed us. Measuring them at playout instead makes
+  // them conditional on playout still running, so the moment the audio callback
+  // stalls the counters freeze at exactly the moment you most want to read
+  // them. Doing it here also makes the callback lighter, not heavier.
+  //
+  // The split that remains is the one that matters: the jitter buffer is
+  // single-threaded by contract, and nothing in this function touches it.
   Datagram datagram;
   for (;;) {
     const auto received = socket_.recv_from(
         radio::ByteSpan{datagram.bytes.data(), datagram.bytes.size()});
     if (!received.ok()) return;
 
-    datagram.length = static_cast<std::uint16_t>(received.bytes);
     datagram.arrival_us = received.arrival_us;
     datagrams_received_.fetch_add(1, std::memory_order_relaxed);
+
+    const radio::ByteView view{datagram.bytes.data(), received.bytes};
+
+    // Classify on four bytes before anything else looks at the datagram. A
+    // malformed packet is then rejected by code that has touched the common
+    // prefix and no stream state (spec section 6.1, and peek_type in
+    // proto.hpp).
+    const auto type = radio::proto::peek_type(view);
+    if (!type) {
+      rejected_.fetch_add(1, std::memory_order_relaxed);
+      continue;
+    }
+
+    if (type.value == radio::proto::Type::Pong) {
+      const auto packet = radio::proto::parse_control(view);
+      if (!packet) {
+        rejected_.fetch_add(1, std::memory_order_relaxed);
+        continue;
+      }
+      prober_.on_pong(packet.value, received.arrival_us);
+      continue;
+    }
+
+    if (type.value == radio::proto::Type::Ping) {
+      const auto packet = radio::proto::parse_control(view);
+      if (!packet) {
+        rejected_.fetch_add(1, std::memory_order_relaxed);
+        continue;
+      }
+      // Answered from whoever asked, not from config_.peer: a peer probing us
+      // has not necessarily been configured as ours, and this is what lets
+      // `radiobench ping` on the workstation measure the phone.
+      answer_ping(packet.value, received.from, received.arrival_us);
+      continue;
+    }
+
+    if (type.value != radio::proto::Type::Audio) {
+      // An assigned type we have not implemented yet -- JOIN and friends,
+      // reserved for M3. Counted separately from a rejection because a peer
+      // running ahead of us is a different situation from a broken packet.
+      unhandled_.fetch_add(1, std::memory_order_relaxed);
+      continue;
+    }
+
+    const auto packet = radio::proto::parse_media(view);
+    if (!packet) {
+      rejected_.fetch_add(1, std::memory_order_relaxed);
+      continue;
+    }
+
+    observe_media(packet.value.header, received.arrival_us);
+
+    // The payload offset is derived from where the parser put the view, not
+    // assumed to be sizeof(header): if the wire format ever grows an extension,
+    // this keeps working and a hardcoded 16 would silently ship garbage.
+    datagram.header = packet.value.header;
+    datagram.payload_offset = static_cast<std::uint16_t>(
+        packet.value.payload.data() - datagram.bytes.data());
+    datagram.payload_length =
+        static_cast<std::uint16_t>(packet.value.payload.size());
 
     // Handed over whole. The jitter buffer belongs to the playback callback and
     // nothing here may touch it.
     (void)rx_.push(datagram);
   }
+}
+
+void Session::probe_if_due(radio::Micros now) noexcept {
+  std::array<std::byte, radio::proto::kControlHeaderSize> outgoing{};
+  const auto probe = prober_.due_probe(now, outgoing);
+  if (!probe.ready()) return;
+
+  if (!socket_
+           .send_to(config_.peer,
+                    radio::ByteView{outgoing.data(), probe.length})
+           .ok()) {
+    // It never left, so it is withdrawn rather than left to time out. A probe
+    // our own socket refused is not the peer failing to answer, and folding the
+    // two together would make a local fault read as a dead link.
+    prober_.withdraw(probe.request_id);
+  }
+}
+
+void Session::answer_ping(const radio::proto::ControlPacket& packet,
+                          const radio::net::Endpoint& from,
+                          radio::Micros t2) noexcept {
+  std::array<std::byte,
+             radio::proto::kControlHeaderSize + radio::proto::kPongBodySize>
+      outgoing{};
+  // t3 read here, as late as it can be: the gap between t2 and it is our own
+  // thinking time, and the prober on the other end subtracts it out.
+  const std::size_t length =
+      radio::encode_pong_for(packet, t2, radio::now_us(), outgoing);
+  if (length == 0) return;
+
+  if (socket_.send_to(from, radio::ByteView{outgoing.data(), length}).ok()) {
+    pongs_sent_.fetch_add(1, std::memory_order_relaxed);
+  }
+}
+
+void Session::publish_probe_stats(radio::Micros now) noexcept {
+  const auto& stats = prober_.stats();
+  probes_sent_.store(static_cast<std::int64_t>(stats.sent),
+                     std::memory_order_relaxed);
+  pongs_received_.store(static_cast<std::int64_t>(stats.replied),
+                        std::memory_order_relaxed);
+  probes_timed_out_.store(static_cast<std::int64_t>(stats.timed_out),
+                          std::memory_order_relaxed);
+  probes_stale_.store(static_cast<std::int64_t>(stats.stale),
+                      std::memory_order_relaxed);
+  probes_bad_echo_.store(static_cast<std::int64_t>(stats.bad_echo),
+                         std::memory_order_relaxed);
+  probes_impossible_.store(static_cast<std::int64_t>(stats.impossible),
+                           std::memory_order_relaxed);
+
+  const auto best = prober_.sync().best();
+  rtt_last_us_.store(prober_.last_rtt_us(), std::memory_order_relaxed);
+  rtt_best_us_.store(best.rtt_us, std::memory_order_relaxed);
+  offset_us_.store(best.offset_us, std::memory_order_relaxed);
+  offset_uncertainty_us_.store(prober_.sync().offset_uncertainty_us(),
+                               std::memory_order_relaxed);
+
+  const radio::Micros last = prober_.last_reply_us();
+  Link state;
+  if (last == 0) {
+    state = Link::Probing;
+  } else if (now - last <= kLinkTimeoutUs) {
+    state = Link::Up;
+  } else {
+    state = Link::Lost;
+  }
+  link_.store(static_cast<std::int32_t>(state), std::memory_order_relaxed);
 }
 
 void Session::network_loop() noexcept {
@@ -304,12 +528,34 @@ void Session::network_loop() noexcept {
                         "could not raise network thread priority");
   }
 
+  radio::Prober::Config probe_config;
+  probe_config.interval_us =
+      static_cast<radio::Micros>(config_.probe_interval_ms) * 1'000ull;
+  probe_config.timeout_us =
+      static_cast<radio::Micros>(config_.probe_timeout_ms) * 1'000ull;
+  prober_.start(probe_config, radio::now_us());
+
   while (running_.load()) {
     // Blocks until a datagram arrives or the timeout expires, so an idle
     // session costs nothing and an arriving packet is picked up immediately.
     (void)socket_.wait_readable(kPollMs);
     receive_available();
     transmit_available();
+
+    // WHY THE PROBER IS ASYNCHRONOUS AND `radiobench ping` IS NOT
+    //
+    // The host tool sends a probe and then sits in a receive loop until the
+    // PONG comes back or the deadline passes, because measuring is all it is
+    // doing. This thread cannot: it is also draining the microphone and
+    // servicing media, and blocking for up to a second would stall both.
+    //
+    // So the probe is fired on a schedule, the outstanding ones live in a small
+    // table, and replies are matched whenever they turn up in the ordinary
+    // receive path. It is the same measurement; only the waiting is different.
+    const radio::Micros now = radio::now_us();
+    probe_if_due(now);
+    prober_.expire(now);
+    publish_probe_stats(now);
   }
 }
 
@@ -344,6 +590,26 @@ Session::Snapshot Session::snapshot() const noexcept {
   out.decode_calls = decode_calls_.load();
   out.decode_total_us = decode_total_us_.load();
   out.decode_max_us = decode_max_us_.load();
+
+  out.link = link_.load();
+  out.probes_sent = probes_sent_.load();
+  out.pongs_received = pongs_received_.load();
+  out.probes_timed_out = probes_timed_out_.load();
+  out.probes_stale = probes_stale_.load();
+  out.probes_bad_echo = probes_bad_echo_.load();
+  out.probes_impossible = probes_impossible_.load();
+  out.pongs_sent = pongs_sent_.load();
+  out.rtt_last_us = rtt_last_us_.load();
+  out.rtt_best_us = rtt_best_us_.load();
+  out.offset_us = offset_us_.load();
+  out.offset_uncertainty_us = offset_uncertainty_us_.load();
+
+  out.rx_jitter_us = rx_jitter_us_.load();
+  out.rx_received = rx_received_.load();
+  out.rx_lost = rx_lost_.load();
+  out.rx_duplicates = rx_duplicates_.load();
+  out.rx_reordered = rx_reordered_.load();
+  out.unhandled = unhandled_.load();
   return out;
 }
 
