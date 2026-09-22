@@ -1,5 +1,46 @@
 # Contributing
 
+## Licensing of contributions
+
+Read this first, because it is the one thing here that cannot be fixed after
+the fact.
+
+This project is released under the
+[PolyForm Noncommercial License 1.0.0](LICENSE) and is also offered under paid
+commercial licences (see [LICENSE-COMMERCIAL.md](LICENSE-COMMERCIAL.md)). That
+second half only works if one party holds the rights to grant it. If a
+contributor keeps sole copyright in their patch, no commercial licence can
+lawfully cover that patch, and the contribution has to be reverted later —
+usually at the worst possible moment.
+
+So, by opening a pull request you agree that:
+
+1. You wrote the contribution yourself, or otherwise have the right to submit
+   it, and it is not encumbered by an employer agreement or a third-party
+   licence you have not disclosed.
+2. You grant Shubham Dhapola a perpetual, worldwide, irrevocable,
+   royalty-free right to use, modify and distribute your contribution,
+   **including the right to license it under terms other than PolyForm
+   Noncommercial**, commercial terms among them.
+3. You retain your own copyright in the contribution. This is a licence to the
+   maintainer, not an assignment — you keep the right to use your own work
+   anywhere else.
+
+Sign off each commit to record that agreement:
+
+```bash
+git commit -s      # appends: Signed-off-by: Your Name <you@example.com>
+```
+
+If you cannot agree to point 2 — a common and entirely reasonable situation
+when contributing on an employer's time — say so in the pull request. Small
+bug fixes can usually still be taken; a substantial feature cannot, and it is
+much better to find that out before you write it.
+
+Third-party code may only be vendored or copied in if its licence is
+permissive (MIT, BSD, Apache-2.0, BSL-1.0) and it is recorded in
+[NOTICE](NOTICE). Copyleft dependencies (GPL, LGPL, AGPL) cannot be accepted.
+
 ## Building
 
 ```bash

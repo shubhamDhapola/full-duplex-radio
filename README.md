@@ -5,7 +5,8 @@ voice-activated, then full duplex — with Opus, adaptive jitter buffering, and
 latency measured rather than estimated.
 
 [![CI](https://github.com/shubhamDhapola/full-duplex-radio/actions/workflows/ci.yml/badge.svg)](https://github.com/shubhamDhapola/full-duplex-radio/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue.svg)](LICENSE)
+[![Commercial](https://img.shields.io/badge/commercial-licence%20available-orange.svg)](LICENSE-COMMERCIAL.md)
 ![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS-lightgrey.svg)
 
@@ -15,6 +16,11 @@ latency measured rather than estimated.
 > link against the host peer; discovery, the peer list and the diagnostics
 > screen are still open. iOS is M9. See the [roadmap](ROADMAP.md) for what
 > exists and what does not.
+
+> **Licence: free for research, paid for commercial.** Noncommercial use —
+> research, teaching, personal projects — is free under the
+> [PolyForm Noncommercial License 1.0.0](LICENSE). Commercial use requires a
+> [paid licence](LICENSE-COMMERCIAL.md).
 
 ---
 
@@ -396,4 +402,35 @@ detail.
 
 ## Licence
 
-[Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for dependency licences.
+**Free for research, paid for commercial.**
+
+This project is released under the
+[PolyForm Noncommercial License 1.0.0](LICENSE). That licence is perpetual,
+irrevocable and costs nothing for **any noncommercial purpose**:
+
+- Academic and industrial research, including publication
+- Teaching, coursework, student and thesis projects
+- Personal study, hobby projects and experiments
+- Use by universities, charities, public research bodies, public safety and
+  health organisations, and government institutions — **regardless of how that
+  work is funded**
+
+You may read, modify, fork and redistribute under those terms. You must pass on
+the licence and the `Required Notice:` line at the top of [LICENSE](LICENSE).
+
+**Commercial use requires a separate paid licence** — shipping this code in a
+product you sell, running it as part of a for-profit company's operations, or
+offering it as a hosted service. See
+[LICENSE-COMMERCIAL.md](LICENSE-COMMERCIAL.md) for where the line falls and how
+to get one.
+
+Note that PolyForm Noncommercial is *source-available*, not an OSI-approved open
+source licence. It was chosen over CC BY-NC because Creative Commons licences
+are drafted for media rather than software: they grant no patent rights, say
+nothing about source versus object form or linking, and define "noncommercial"
+loosely. PolyForm is the software-native equivalent, and it does grant a patent
+licence.
+
+Dependencies remain under their own permissive licences — see [NOTICE](NOTICE).
+Contributions carry an inbound licence grant; see
+[CONTRIBUTING.md](CONTRIBUTING.md#licensing-of-contributions).

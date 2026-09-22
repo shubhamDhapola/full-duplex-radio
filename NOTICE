@@ -1,16 +1,31 @@
 Full-Duplex Radio
 Copyright 2026 Shubham Dhapola
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+Required Notice: Copyright 2026 Shubham Dhapola
+(https://github.com/shubhamDhapola/full-duplex-radio)
 
-    http://www.apache.org/licenses/LICENSE-2.0
+Licensed under the PolyForm Noncommercial License 1.0.0 (the "License").
+Free for research, education, personal and other noncommercial use; commercial
+use requires a separate paid licence. You may obtain a copy of the License at
+
+    https://polyformproject.org/licenses/noncommercial/1.0.0
+
+SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+Commercial licensing: see LICENSE-COMMERCIAL.md.
+
+Releases made before 2026-09-22 were published under the Apache License 2.0 and
+remain available under those terms.
+
+--------------------------------------------------------------------------
 
 This product bundles no third-party source. Dependencies are fetched at
 configure time and remain under their own licences:
 
   * Catch2 (test only)        Boost Software License 1.0
   * nlohmann/json (test only) MIT
-  * Opus (from M1)            BSD 3-Clause
-  * Oboe (Android, from M2)   Apache License 2.0
+  * Opus                      BSD 3-Clause
+  * Oboe (Android)            Apache License 2.0
+
+None of these impose a fee or a copyleft obligation. Redistributors are
+responsible for carrying their notices.
