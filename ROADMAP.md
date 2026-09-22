@@ -6,8 +6,8 @@ next begins.
 | | Milestone | Status |
 |---|---|---|
 | [M0](#m0--protocol-transport-and-measurement) | Protocol, transport, measurement, host tooling | **complete** |
-| [M1](#m1--media-pipeline-host) | Media pipeline on the host | next |
-| [M2](#m2--android) | Android | |
+| [M1](#m1--media-pipeline-host) | Media pipeline on the host | **complete** |
+| [M2](#m2--android) | Android | in progress |
 | [M3](#m3--discovery-and-sessions) | Discovery and sessions | |
 | [M4](#m4--adaptive-transport) | Adaptive transport | |
 | [M5](#m5--full-duplex) | Full duplex | |
@@ -54,16 +54,22 @@ supplies the second endpoint.
 
 ## M1 — Media pipeline (host)
 
+**Complete.** Results in [docs/measurements.md §8](docs/measurements.md).
+
 Goal: `wav → Opus → UDP → impairment → jitter buffer → decode → wav`, entirely
 within one process, so **end-to-end latency is exactly measurable with no
 clock-synchronisation error**. That figure becomes the reference every on-device
 measurement is compared against.
 
-- [ ] libopus pinned by URL and checksum
-- [ ] Opus encoder/decoder wrappers: VOIP mode, 48 kHz mono, 20 ms frames,
+- [x] libopus pinned by URL and checksum
+- [x] Opus encoder/decoder wrappers: VOIP mode, 48 kHz mono, 20 ms frames,
       in-band FEC, expected-loss hint, DTX; fully preallocated
-- [ ] Lock-free single-producer/single-consumer PCM and packet rings, bounded,
-      discarding oldest on overflow
+- [x] Lock-free single-producer/single-consumer PCM and packet rings, bounded.
+      A full ring **refuses and counts the refusal** rather than dropping its
+      oldest entry: dropping oldest means advancing the read index, which
+      belongs to the consumer, and doing it from the producer would forfeit the
+      lock-free argument. Discarding by playout deadline happens one layer up,
+      in the jitter buffer, which is the meaningful criterion anyway
 - [x] Reorder queue with a playout deadline
 - [x] Jitter buffer, **pull model**: decoding happens in the consumer, so the
       playout clock is the audio clock and there is no second clock to drift
@@ -90,11 +96,18 @@ tracing on one end of every call.
 - [x] CMake integration linking the core for arm64-v8a and x86_64
 - [x] Oboe capture and playback in low-latency mode
 - [x] JNI boundary carrying commands and state, never on the audio callback
-- [ ] Push-to-talk UI, peer list, connection state
-- [ ] Diagnostics screen: RTT, jitter, loss, late, buffer depth, codec timings
+- [x] Push-to-talk UI
+- [ ] Peer list — needs M3 discovery
+- [x] Connection state and the diagnostics screen: RTT, jitter, loss, late,
+      buffer depth, codec timings. Built on `radio::Prober`, which probes
+      PING/PONG asynchronously because the network thread is also servicing
+      media and cannot block on a reply the way `radiobench ping` does
 - [ ] Conformance vectors executed on device
 - [ ] Device audio-latency measurement against the M1 host baseline
-- [ ] Real-radio validation carried over from M0
+- [x] Real-radio validation carried over from M0 — phone and workstation over
+      Wi-Fi, each measuring the other, metrics reconciled against
+      `radiobench respond`'s ground truth. Phone-to-phone needs a second
+      device. See [measurements §9.6](docs/measurements.md)
 
 ---
 

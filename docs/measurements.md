@@ -507,5 +507,138 @@ the wrong thing entirely — the same trap as the 22 ms loopback in section 8, i
 a different disguise.
 
 The fix is scheduling, not a faster encoder: the network thread now asks for
-audio-adjacent priority via `setpriority`. **That change is built but not yet
-re-measured on the device**, so no post-fix figure is quoted here.
+audio-adjacent priority via `setpriority`. Re-measured in section 9.7:
+
+| Measurement | Encode, mean |
+|---|---|
+| in-session, ordinary priority | 5342 µs |
+| in-session, audio-adjacent priority | **1008 µs** |
+
+A 5.3x reduction from a scheduling call, with the encoder untouched.
+
+---
+
+## 9.6 Over a real radio, against the host peer
+
+Everything above section 9.5 was measured with the phone sending to
+`127.0.0.1` — its own loopback. The datagrams left the socket and came back,
+which exercises the protocol and the whole pipeline, but not a radio. This is
+the validation M0 carried forward.
+
+Redmi Note 9 Pro at 192.168.1.11, workstation at 192.168.1.6, both on the same
+2.4 GHz AP. `radiobench respond` on the workstation, the app in transport mode.
+
+### The link, both directions
+
+The phone answers PINGs as well as sending them, through the same
+`encode_pong_for()` the host tool uses, so each end can measure the other:
+
+| Direction | Probes | RTT |
+|---|---|---|
+| workstation → phone (`radiobench ping`) | 10 sent, 10 replied, 0 timed out | p50 34.8, min 24.5 ms |
+| phone → workstation (app prober) | 78 sent, 0 lost | 26.6 ms now, 26.0 ms best |
+
+Against 0.17 ms on loopback. Two orders of magnitude, and none of it is code:
+it is channel access, aggregation and the phone's Wi-Fi power save. No amount of
+loopback testing would have produced this number, which is exactly why M0
+refused to claim it.
+
+### The offsets agree from opposite ends
+
+The most useful result here is one neither end was tuned to produce. Each
+independently estimated the other's clock offset:
+
+| Measured by | Offset (peer − local) | Uncertainty |
+|---|---|---|
+| workstation, of the phone | **+35 379 742.938 ms** | ± 12.236 ms |
+| phone, of the workstation | **−35 379 744.177 ms** | ± 10.142 ms |
+
+Same magnitude, opposite sign, **1.239 ms apart** — comfortably inside either
+error bar, let alone their sum. Two implementations, two languages at the UI
+layer, two CPU architectures, agreeing on a number to within a millisecond out
+of nine and a half hours.
+
+The absolute value is meaningless on purpose: `CLOCK_MONOTONIC_RAW` epochs are
+unrelated across machines (see `clock.hpp`), so this is the difference between
+two boot times. What is being validated is the *estimator*, not the clocks.
+
+### Media, reconciled against the receiver
+
+One six-second talkspurt, 32 kbps, FEC off:
+
+| | Phone (sender) | `radiobench respond` (receiver) |
+|---|---|---|
+| packets | 302 sent, 25 KiB | 302 received of **302 expected** |
+| lost | — | 0 (0.000%) |
+| duplicates / reordered / too old | 0 / 0 | 0 / 0 / 0 |
+| bitrate | — | 33.7 kbps over 6.07 s |
+
+Both ends' datagram totals reconcile exactly: 216 PONGs + 302 media = 518
+datagrams received, which is what the responder counted.
+
+### A discrepancy of exactly one packet
+
+The first run of this test did **not** reconcile. The phone reported 300 sent
+where the responder counted 301 received of 301 expected — and a receiver
+reporting *more* than the sender sent is the kind of number that has to be
+explained rather than rounded away.
+
+It was the sender under-counting. The packet carrying `TALKSPURT_END` was
+encoded and sent on a separate branch of `transmit_available()` that never
+incremented `packets_sent_`, `bytes_sent_` or the encode timer. One packet per
+talkspurt, invisible at the sender, present on the wire.
+
+Worth recording because of how it was found: not by a test, not by reading the
+code, but by two independent counters disagreeing by one. That is the entire
+argument for validating against a second implementation's ground truth rather
+than against oneself.
+
+### Jitter is where the radio shows up
+
+Two runs, same configuration, minutes apart:
+
+| Run | Interarrival jitter, mean | Peak |
+|---|---|---|
+| first | 3.136 ms | 20.000 ms |
+| second | 29.177 ms | 303.000 ms |
+
+A 20 ms peak is exactly one frame interval — one packet arriving a frame late,
+so two are delivered together. That is ordinary Wi-Fi retry behaviour.
+
+The 303 ms peak is not ordinary, and it is recorded rather than averaged away.
+The phone was simultaneously servicing adb and screen capture, and there is no
+counter anywhere in the system that reported a fault. It is the same lesson as
+the 98.5 ms output-callback gap in section 9.2: the instrument that would have
+told you is not always the one you are watching.
+
+Neither run lost a single packet. Jitter this size is what the jitter buffer
+exists to absorb, and a 60 ms target does not absorb 303 ms — which is the
+measurement M4's adaptive target will be argued from.
+
+---
+
+## 9.7 The scheduling fix, measured
+
+Section 9.5 left `setpriority` built but unmeasured. Same device, same
+configuration, one six-second talkspurt:
+
+| | Encode, mean | Encode, max |
+|---|---|---|
+| before, ordinary priority | 5342 µs | 12508 µs |
+| after, audio-adjacent priority | **1008 µs** | 2980 µs |
+| second run, after | 1022 µs | 6802 µs |
+
+The mean is stable across runs at roughly 1 ms, a fifth of what it was. The max
+is not stable — 2980 µs and 6802 µs on two runs of the same build — because the
+max is a measure of the worst deschedule, and priority reduces how often that
+happens without removing the possibility.
+
+One caveat, stated because it cuts against the tidy story: the start-up
+self-check on this session reported **1804 µs** on an idle thread, against
+750 µs in the section 9.5 session. Same code, same device. The idle-thread
+figure is itself sensitive to the CPU governor's state during app launch, so it
+is not the stable baseline section 9.5 treated it as. What can be claimed is
+the in-session comparison, which is like for like: **5342 µs → 1008 µs**.
+
+Decode, which runs on the audio callback and was never the problem, is
+unchanged at 7.5-8.8 µs mean.

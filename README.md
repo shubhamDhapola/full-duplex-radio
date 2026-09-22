@@ -9,10 +9,12 @@ latency measured rather than estimated.
 ![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS-lightgrey.svg)
 
-> **Status: milestone 0 of 9 complete.** The protocol, transport, measurement
-> layers and host tooling are done and tested. There is **no mobile app yet** —
-> Android is M2, iOS is M9. See the [roadmap](ROADMAP.md) for what exists and
-> what does not.
+> **Status: M0 and M1 complete, M2 in progress.** The protocol, transport,
+> measurement layers, host tooling and the full media pipeline are done and
+> tested. **An Android app exists** and has been validated over a real Wi-Fi
+> link against the host peer; discovery, the peer list and the diagnostics
+> screen are still open. iOS is M9. See the [roadmap](ROADMAP.md) for what
+> exists and what does not.
 
 ---
 
@@ -94,6 +96,71 @@ per row:
 
 Same loss rate. A 62-frame burst is 1.24 seconds of audio gone at once.
 
+### The codec is 0.4% of the latency
+
+The whole pipeline — `wav → Opus → UDP → impairment → jitter buffer → decode →
+wav` — inside one process, so capture-to-playout is a subtraction with no
+clock-offset estimator in it. `excellent` scenario, FEC off, milliseconds:
+
+| Stage | p50 | p95 | max |
+|---|---|---|---|
+| capture → encode | 0.32 | 0.51 | 2.02 |
+| queue → sent | 0.04 | 0.11 | 0.21 |
+| jitter buffer | 79.87 | 81.92 | 85.47 |
+| decode | 0.06 | 0.12 | 0.61 |
+| **end to end** | **81.92** | **81.92** | **88.07** |
+
+Encode is 320 µs and decode 60 µs against a 20 ms frame. Every millisecond that
+matters is buffer depth — a deliberate choice, not a cost the codec imposed.
+
+A 60 ms target produced 82 ms, and that is correct: playout is frame-granular,
+so a deadline landing mid-tick waits for the next one. *The jitter buffer target
+is a lower bound.*
+
+### FEC, A/B over an identical impairment pattern
+
+The acceptance criterion is not "FEC sounds better" — it is that two runs over a
+*byte-identical* impairment pattern differ, and that the FEC counter accounts
+for the difference. The harness verifies the patterns really were identical and
+refuses to report a pair where they were not.
+
+| Scenario | concealed, FEC off → on | FEC recovered |
+|---|---|---|
+| congested | 32 → 3 | **29** |
+| poor | 52 → 17 | **36** |
+| extreme | 73 → 28 | **48** |
+
+### The phone agrees with the host on a number neither was tuned to produce
+
+The Android app running the same core, five seconds of push-to-talk, 60 ms
+jitter target: 248 sent, 248 received, 0 rejected, 0 late, 0 concealed, and a
+buffer depth of 4 frames — **80 ms**. That is the same 80 ms the host measured
+in the table above, arrived at independently on a different CPU architecture.
+
+### Over a real radio
+
+Redmi Note 9 Pro and a workstation on one 2.4 GHz AP. Each end estimates the
+other's clock offset independently:
+
+| Measured by | Offset (peer − local) | Uncertainty |
+|---|---|---|
+| workstation, of the phone | +35 379 742.938 ms | ± 12.236 ms |
+| phone, of the workstation | −35 379 744.177 ms | ± 10.142 ms |
+
+Same magnitude, opposite sign, **1.239 ms apart** — two implementations, two
+architectures, agreeing to within a millisecond out of nine and a half hours.
+
+RTT over the air is 26–35 ms against 0.17 ms on loopback. Two orders of
+magnitude, none of it code: channel access, aggregation and Wi-Fi power save.
+No amount of loopback testing would have produced that number, which is exactly
+why it was not claimed until a radio was involved.
+
+One six-second talkspurt reconciled exactly: 302 sent, 302 received of 302
+expected, 0 lost. The *first* run did not — the sender reported 300 where the
+receiver counted 301, because the packet carrying `TALKSPURT_END` was sent on a
+branch that never incremented the counter. Found by two independent counters
+disagreeing by one, not by a test.
+
 ### An instrument artefact, quantified
 
 On loopback — no network at all — the receiver measured 7.3 ms of peak jitter.
@@ -123,7 +190,7 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-159 tests, warning-free under `-Wconversion -Wsign-conversion -Wold-style-cast`.
+226 tests, warning-free under `-Wconversion -Wsign-conversion -Wold-style-cast`.
 
 ### Try the transport
 
@@ -166,6 +233,20 @@ x86 and arm64 even when the implementation is undefined behaviour, so only
 cmake -B build-san -G Ninja -DRADIO_SANITIZE=ON -DCMAKE_BUILD_TYPE=Debug
 cmake --build build-san && ctest --test-dir build-san
 ```
+
+### Build and run the Android app
+
+```bash
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+cd android
+./gradlew :app:installDebug      # with a device attached
+adb logcat -s fdradio
+```
+
+The app consumes the core with `add_subdirectory`, not a vendored copy, so the
+phone runs the *same* source the benchmarks above measured. Note the SDK's
+bundled CMake 3.22 cannot configure this project — point `local.properties` at a
+newer one. Full detail in [android/README.md](android/README.md).
 
 ### Cross-compile the core
 
@@ -222,15 +303,16 @@ More in [docs/architecture.md](docs/architecture.md).
 protocol/          normative wire-format spec + conformance vectors
 core/
   include/radio/   public headers
-  src/             proto · net · time · metrics · sim
-  tests/           159 tests: unit, conformance, adversarial input
+  src/             proto · net · time · metrics · audio · sim
+  tests/           226 tests: unit, conformance, adversarial input
 tools/
-  radiobench/      protocol peer: respond · ping · send
+  radiobench/      protocol peer: respond · ping · send · wavloop
   impair/          seeded impairment proxy with ground-truth logging
-benchmarks/        impairment scenarios covering the test matrix
+android/           Kotlin/Compose app linking the core directly
+benchmarks/        impairment scenarios and the unattended matrix runner
 docs/
   architecture.md
-  measurements.md  results and instrument characterisation
+  measurements.md  results, instrument and device characterisation
   decisions/       architecture decision records
 ```
 
@@ -294,13 +376,14 @@ suite of unknown value.
 
 ## Roadmap
 
-M0 is complete. [ROADMAP.md](ROADMAP.md) has the detail.
+M0 and M1 are complete, M2 is in progress. [ROADMAP.md](ROADMAP.md) has the
+detail.
 
 | | Milestone | Status |
 |---|---|---|
 | M0 | Protocol, transport, measurement, host tooling | **complete** |
-| M1 | Opus, lock-free ring buffers, pull-model jitter buffer | next |
-| M2 | Android: Oboe, JNI, push-to-talk, diagnostics | |
+| M1 | Opus, lock-free ring buffers, pull-model jitter buffer | **complete** |
+| M2 | Android: Oboe, JNI, push-to-talk, diagnostics | in progress |
 | M3 | mDNS discovery, sessions, reconnection | |
 | M4 | Adaptive jitter target, clock-drift compensation, adaptive FEC | |
 | M5 | Full duplex, multi-speaker mixing | |
